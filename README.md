@@ -2,7 +2,7 @@
 
 Site institucional da **UpDown Internet**, publicado em **https://site.updown.com.br**.
 
-É um site estático, gerado com Astro. Não usa PHP nem banco de dados: o servidor só precisa entregar arquivos (nginx).
+É um site estático, gerado com Astro. Não usa PHP nem banco de dados: o servidor só precisa entregar arquivos. Hospedado no servidor do projeto NIA (**UPT-UBUNTU01**), atrás do **Caddy**.
 
 Origem da cópia: `https://chore-ajustess.updown-site.pages.dev` (Cloudflare Pages), em 12/11/2026.
 
@@ -59,12 +59,11 @@ EMAIL=comercial@updown.com.br bash /root/instalar-site.sh
 
 O script:
 
-1. confere se as portas 80/443 estão livres ou com o nginx (se outro programa estiver usando, ele para e avisa);
-2. instala `nginx`, `curl` e `certbot`;
-3. baixa a pasta `site/` deste repositório e copia para `/var/www/site-updown`;
-4. cria o site `site.updown.com.br` no nginx, **sem alterar os outros sites do servidor**;
-5. testa todas as páginas localmente;
-6. confere o DNS e emite o certificado HTTPS (Let's Encrypt), com renovação automática.
+1. vê quem está nas portas 80/443: **Caddy** (caso do UPT-UBUNTU01) ou nginx;
+2. baixa a pasta `site/` deste repositório e copia para `/var/www/site-updown`;
+3. **Caddy:** acrescenta um bloco `site.updown.com.br` ao Caddyfile (entre os marcadores `# >>> site-updown` e `# <<< site-updown`), valida com `caddy validate`, faz backup do Caddyfile e recarrega. Os outros sites do Caddy (como o NIA) não são alterados. O HTTPS é emitido e renovado pelo próprio Caddy;
+   **nginx:** instala `nginx`/`certbot`, cria o site e emite o certificado com o certbot;
+4. testa todas as páginas.
 
 Se o DNS ainda não tiver propagado, o site fica no ar em HTTP e o script avisa. Depois é só rodar o mesmo comando de novo.
 
@@ -75,7 +74,8 @@ Se o DNS ainda não tiver propagado, o site fica no ar em HTTP e o script avisa.
 | `DOMINIO` | `site.updown.com.br` | publicar em outro domínio |
 | `EMAIL` | (vazio) | e-mail de avisos do Let's Encrypt |
 | `BRANCH` | `main` | publicar outro branch do repositório |
-| `SEM_SSL` | `0` | `1` pula o certificado HTTPS |
+| `SEM_SSL` | `0` | `1` pula o certificado HTTPS (só nginx) |
+| `CADDYFILE` | detectado | caminho do Caddyfile, se não for o padrão |
 
 Exemplo: `DOMINIO=www.updowntelecom.com.br EMAIL=comercial@updown.com.br bash /root/instalar-site.sh`
 
@@ -96,7 +96,6 @@ A versão anterior fica guardada em `/var/www/site-updown.anterior-AAAAMMDD-HHMM
 ls -d /var/www/site-updown.anterior-*          # escolha a versão
 mv /var/www/site-updown /var/www/site-updown.com-problema
 mv /var/www/site-updown.anterior-AAAAMMDD-HHMMSS /var/www/site-updown
-systemctl reload nginx
 ```
 
 ## Configuração no servidor
@@ -104,17 +103,19 @@ systemctl reload nginx
 | Item | Local |
 |---|---|
 | Arquivos publicados | `/var/www/site-updown` |
-| Site do nginx | `/etc/nginx/sites-available/site-updown` |
-| Certificado | `/etc/letsencrypt/live/site.updown.com.br/` |
-| Logs | `/var/log/nginx/access.log` e `error.log` |
+| Configuração (Caddy) | bloco `# >>> site-updown` em `/etc/caddy/Caddyfile` |
+| Backups do Caddyfile | `/etc/caddy/Caddyfile.bkp-AAAAMMDD-HHMMSS` |
+| Configuração (nginx) | `/etc/nginx/sites-available/site-updown` |
 
-Comandos úteis:
+Comandos úteis (Caddy):
 
 ```bash
-nginx -t && systemctl reload nginx   # validar e recarregar o nginx
-certbot certificates                 # ver validade do certificado
-certbot renew --dry-run              # testar a renovação
+caddy validate --config /etc/caddy/Caddyfile   # validar
+systemctl reload caddy                         # recarregar
+journalctl -u caddy -n 50 --no-pager           # log (certificado, erros)
 ```
+
+Para tirar o site do ar no Caddy: apague o bloco entre `# >>> site-updown` e `# <<< site-updown` no Caddyfile e rode `systemctl reload caddy`.
 
 ## Hospedagem Apache (cPanel), se precisar
 
@@ -131,5 +132,6 @@ Continuam vindo de fora e não fazem parte deste repositório:
 
 ## Observações
 
+- O Caddyfile pode ter `CADDYFILE=/caminho/do/arquivo` informado na execução, se não for o padrão.
 - 24 logos de canais em `.png` (pasta `site/images/grade` e `site/images/canais`) davam erro 404 no site de origem. Eles foram gerados a partir das versões `.webp` que já existiam. Além disso, o nginx entrega o `.webp` caso algum `.png` dessas pastas não exista.
 - O código-fonte em Astro não está aqui: este repositório guarda o site já gerado. Mudanças de layout feitas no projeto Astro precisam ser geradas de novo (`npm run build`) e o conteúdo de `dist/` copiado para `site/`.
