@@ -1,0 +1,1 @@
+const e="https://apps.apple.com/br/app/updown-telecom-app/id6671091666",t="https://play.google.com/store/apps/details?id=com.r3r.updowntelecom";function o(){return typeof navigator>"u"?t:/iPad|iPhone|iPod/.test(navigator.userAgent)?e:t}export{e as A,t as P,o as g};
