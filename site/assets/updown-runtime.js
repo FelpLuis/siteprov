@@ -134,6 +134,7 @@
       if (again) { again.focus({ preventScroll: true }); try { if (selS != null) again.setSelectionRange(selS, selE); } catch (e) { /* ok */ } }
     }
     document.body.classList.toggle('modal-aberto', !!dlg);
+    if (window.UpDownFX) window.UpDownFX(app);
   }
   function schedule() { if (!pending) { pending = true; (window.requestAnimationFrame || setTimeout)(render); } }
 
