@@ -20,7 +20,7 @@
     return fetch(API + rota, op).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (r.status === 401 && rota !== '/login') { st.fase = 'login'; st.eu = null; st.erro = rota === '/eu' ? '' : (j.mensagem || ''); desenha(); }
-        if (!r.ok) { var e = new Error(j.mensagem || 'Não foi possível concluir. Tente novamente.'); e.status = r.status; throw e; }
+        if (!r.ok) { var e = new Error(j.mensagem || ('A Central não respondeu como esperado (código ' + r.status + '). Tente novamente em instantes.')); e.status = r.status; throw e; }
         return j;
       });
     });
@@ -45,15 +45,32 @@
   }
 
   /* ---------- telas ---------- */
+  function lembrado() { try { return localStorage.getItem('updown-central-usuario') || ''; } catch (e) { return ''; } }
+  function ic(d) { return '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="' + d + '"/></svg>'; }
+  var I = {
+    pix: 'M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4zm13-2h-2v2h-2v2h2v2h2v-2h2v-2h-2v-2zm-5 0h2v2h-2v-2zm6 6h2v2h-2v-2z',
+    doc: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zm-5 4h8v2H8v-2zm0 4h8v2H8v-2z',
+    graf: 'M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z',
+    chat: 'M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z',
+    olho: 'M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9zm0-7.2a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4z',
+    cad: 'M18 8h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3.1-9H8.9V6a3.1 3.1 0 0 1 6.2 0v2z'
+  };
   function telaLogin() {
-    return '<div class="ca-card ca-login"><h2 class="ca-h">Entre na sua conta</h2>' +
-      '<p class="ca-sub">Use o mesmo usuário e senha da Central do Assinante da UpDown.</p>' +
+    var itens = [[I.pix, 'Pague em segundos', 'Pix copia e cola ou boleto, sem sair da tela.'], [I.doc, 'Seus contratos', 'Veja o que está ativo e o que falta assinar.'],
+                 [I.graf, 'Seu consumo', 'Acompanhe o uso da sua fibra mês a mês.'], [I.chat, 'Atendimento direto', 'Chat com a equipe, já com o seu cadastro.']];
+    var form = '<div class="ca-card ca-login"><div class="ca-sel">' + ic(I.cad) + ' Acesso seguro</div><h1 class="ca-h1">Central do Assinante</h1>' +
+      '<p class="ca-sub">Entre com o mesmo usuário e senha que você já usa na UpDown.</p>' +
       '<form data-form="login" novalidate>' +
-      '<label for="ca-login">Usuário</label><input class="ca-in" id="ca-login" name="login" autocomplete="username" autocapitalize="none" spellcheck="false" required>' +
-      '<label for="ca-senha">Senha</label><input class="ca-in" id="ca-senha" name="senha" type="password" autocomplete="current-password" required>' +
+      '<label for="ca-login">Usuário <span>CPF/CNPJ ou e-mail</span></label><input class="ca-in" id="ca-login" name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next" value="' + esc(lembrado()) + '" required>' +
+      '<label for="ca-senha">Senha</label><div class="ca-senha"><input class="ca-in" id="ca-senha" name="senha" type="' + (st.verSenha ? 'text' : 'password') + '" autocomplete="current-password" enterkeyhint="go" required>' +
+      '<button type="button" class="ca-olho" data-act="versenha" aria-pressed="' + !!st.verSenha + '" aria-label="' + (st.verSenha ? 'Ocultar senha' : 'Mostrar senha') + '">' + ic(I.olho) + '</button></div>' +
       (st.erro ? '<div class="ca-msg erro" role="alert">' + esc(st.erro) + '</div>' : '') +
       '<button class="ca-btn full" type="submit"' + (st.enviando ? ' disabled' : '') + '>' + (st.enviando ? 'Entrando...' : 'Entrar') + '</button></form>' +
-      '<div class="ca-msg info">Esqueceu a senha ou é seu primeiro acesso? <a href="' + WA + encodeURIComponent('Olá! Vim do site e preciso de ajuda para acessar a Central do Assinante.') + '" target="_blank" rel="noopener" style="font-weight:700">Fale com a gente no WhatsApp</a>.</div></div>';
+      '<div class="ca-ajuda"><a href="' + WA + encodeURIComponent('Olá! Vim do site e esqueci minha senha da Central do Assinante.') + '" target="_blank" rel="noopener">Esqueci minha senha</a>' +
+      '<a href="' + WA + encodeURIComponent('Olá! Vim do site e quero fazer meu primeiro acesso à Central do Assinante.') + '" target="_blank" rel="noopener">Primeiro acesso</a></div></div>';
+    var lado = '<div class="ca-lado"><div class="ca-eyebrow">Tudo da sua conta em um só lugar</div><h2 class="ca-h2">Resolva em poucos toques, <span>a qualquer hora.</span></h2>' +
+      '<ul class="ca-ben">' + itens.map(function (i) { return '<li><span class="ca-bi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></li>'; }).join('') + '</ul></div>';
+    return '<div class="ca-entrada">' + form + lado + '</div>';
   }
   function carregando(t) { return '<div class="ca-load">' + t + '</div>'; }
   function falha(o) { return '<div class="ca-msg erro">' + esc(o.erro) + ' <button class="ca-btn sec sm" data-act="recarregar" style="margin-left:8px">Tentar de novo</button></div>'; }
@@ -154,6 +171,7 @@
     var foco = document.activeElement && el.contains(document.activeElement) ? document.activeElement.id : '';
     var vals = {};
     el.querySelectorAll('input').forEach(function (i) { vals[i.id] = i.value; });
+    document.body.classList.toggle('ca-so-login', st.fase !== 'app');
     el.innerHTML = st.fase === 'carregando' ? carregando('Abrindo a Central...') : st.fase === 'login' ? telaLogin() : telaApp();
     el.querySelectorAll('input').forEach(function (i) { if (vals[i.id] != null) i.value = vals[i.id]; });
     if (foco && document.getElementById(foco)) document.getElementById(foco).focus();
@@ -175,7 +193,8 @@
     if (!login || !senha) { st.erro = 'Informe usuário e senha.'; return desenha(); }
     st.enviando = true; st.erro = ''; desenha();
     api('POST', '/login', { login: login, senha: senha }).then(function () {
-      st.enviando = false; f.querySelector('#ca-senha').value = ''; inicio();
+      st.enviando = false; st.verSenha = false; try { localStorage.setItem('updown-central-usuario', login); } catch (e2) { /* modo privado */ }
+      inicio();
     }).catch(function (er) {
       st.enviando = false; st.erro = er.status ? er.message : 'A Central está indisponível no momento. Tente em instantes.'; desenha();
       var s = document.getElementById('ca-senha'); if (s) { s.value = ''; s.focus(); }
@@ -185,7 +204,8 @@
     var b = e.target.closest && e.target.closest('#central-app [data-act]');
     if (!b) return;
     var act = b.getAttribute('data-act');
-    if (act === 'aba') { st.aba = b.getAttribute('data-aba'); desenha(); var t = document.getElementById('central-app'); if (t && t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: 'start' }); }
+    if (act === 'versenha') { st.verSenha = !st.verSenha; desenha(); var cs = document.getElementById('ca-senha'); if (cs) cs.focus(); }
+    else if (act === 'aba') { st.aba = b.getAttribute('data-aba'); desenha(); var t = document.getElementById('central-app'); if (t && t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: 'start' }); }
     else if (act === 'sair') { api('POST', '/logout', {}).catch(function () {}).then(function () { st.fase = 'login'; st.eu = null; st.erro = ''; st.aba = 'inicio'; st.pix = {}; contato(); desenha(); }); }
     else if (act === 'recarregar') { carrega(); desenha(); }
     else if (act === 'chat') abrirChat();
@@ -206,7 +226,7 @@
 
   document.addEventListener('updown:render', desenha);   // o site redesenha a página ao mudar de celular para desktop
   if (!document.getElementById('ud-central-css')) {
-    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=1';
+    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=3';
     document.head.appendChild(l);
   }
   window.UpDownCentral = { iniciar: function () { desenha(); inicio(); } };

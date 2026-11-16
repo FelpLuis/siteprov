@@ -54,5 +54,57 @@
 .ca-load::before{content:"";display:block;width:34px;height:34px;margin:0 auto 14px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--cta);animation:ca-gira .8s linear infinite}
 @keyframes ca-gira{to{transform:rotate(360deg)}}
 .ca-vazio{padding:28px;text-align:center;border-radius:18px;border:1px dashed var(--line2);color:var(--body);font-size:15px}
+
+/* ---------- entrada (login), mobile first ---------- */
+.ca-entrada{display:flex;flex-direction:column;gap:22px}
+.ca-login{max-width:none;width:100%;margin:0;padding:24px 20px}
+.ca-sel{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border-radius:999px;background:var(--okbg);color:var(--oktx);font-size:12px;font-weight:800}
+.ca-sel svg{width:15px;height:15px}
+.ca-h1{margin:12px 0 0;font:700 28px/1.08 "Space Grotesk",Inter,sans-serif;letter-spacing:-.02em;color:var(--h)}
+.ca-login label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:16px}
+.ca-login label span{font-weight:500;font-size:12px;color:var(--muted)}
+.ca-in{height:54px;font-size:17px;border-radius:16px}
+.ca-senha{position:relative}
+.ca-senha .ca-in{padding-right:56px}
+.ca-olho{position:absolute;right:4px;top:9px;width:48px;height:48px;display:grid;place-items:center;border:0;border-radius:12px;background:transparent;color:var(--muted);cursor:pointer}
+.ca-olho[aria-pressed="true"]{color:var(--cta)}
+.ca-login .ca-btn.full{min-height:54px;font-size:17px;border-radius:16px;margin-top:20px}
+.ca-ajuda{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;margin-top:16px}
+.ca-ajuda a{display:inline-flex;align-items:center;min-height:44px;font-size:14.5px;font-weight:700}
+.ca-eyebrow{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--eyeA)}
+.ca-h2{margin:8px 0 0;font:700 24px/1.12 "Space Grotesk",Inter,sans-serif;letter-spacing:-.02em;color:var(--h)}
+.ca-h2 span{color:var(--eyeB)}
+.ca-ben{list-style:none;margin:16px 0 0;padding:0;display:grid;grid-template-columns:1fr;gap:10px}
+.ca-ben li{display:flex;gap:12px;align-items:center;padding:14px;border-radius:16px;background:var(--surf);border:1px solid var(--line)}
+.ca-bi{flex:0 0 44px;height:44px;display:grid;place-items:center;border-radius:12px;background:var(--iconbg);color:var(--icon)}
+.ca-ben b{display:block;font-size:15px;color:var(--h)}
+.ca-ben small{display:block;margin-top:2px;font-size:13.5px;line-height:1.4;color:var(--body)}
+@media (min-width:900px){
+ .ca-entrada{flex-direction:row-reverse;align-items:center;gap:56px;min-height:540px}
+ .ca-login{flex:0 0 440px;padding:36px}
+ .ca-lado{flex:1;min-width:0}
+ .ca-h1{font-size:32px}.ca-h2{font-size:40px}
+ .ca-ben{grid-template-columns:1fr 1fr;gap:14px;margin-top:26px}
+ .ca-ben li{align-items:flex-start;padding:18px}
+}
+
+/* ---------- tela de login sem rolagem: cabe inteira na altura da tela ---------- */
+body.ca-so-login{overflow:hidden}
+body.ca-so-login .app-raiz{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+body.ca-so-login .app-raiz>footer{display:none}
+body.ca-so-login .app-raiz>header{flex:0 0 auto}
+body.ca-so-login .app-raiz>section{flex:1 1 auto;min-height:0;display:flex;align-items:safe center;padding-top:0!important;overflow-y:auto}
+body.ca-so-login .app-raiz>section>div{width:100%}
+body.ca-so-login #central-app{min-height:0}
+body.ca-so-login .ca-lado{display:none}
+body.ca-so-login .ca-entrada{min-height:0}
+@media (min-width:900px){body.ca-so-login .ca-lado{display:block}}
+@media (max-height:700px){
+ .ca-login{padding:16px 18px}.ca-h1{font-size:23px;margin-top:8px}.ca-login .ca-sub{font-size:13.5px;margin-top:4px}
+ .ca-login label{margin-top:10px}.ca-in{height:48px}.ca-olho{top:6px}
+ .ca-login .ca-btn.full{min-height:48px;margin-top:14px}.ca-ajuda{margin-top:8px}.ca-msg{margin-top:10px;padding:9px 12px}
+}
+@media (min-width:900px) and (max-height:760px){.ca-h2{font-size:32px}.ca-ben{margin-top:16px;gap:10px}.ca-ben li{padding:12px}.ca-login{padding:24px 28px}}
+@media (max-height:560px){.ca-sel,.ca-login .ca-sub{display:none}.ca-h1{margin-top:0}}
 @media (max-width:600px){.ca-item .acoes{width:100%}.ca-item .acoes .ca-btn{flex:1}.ca-ola{font-size:22px}}
 @media (prefers-reduced-motion:reduce){.ca-bar i,.ca-load::before{animation:none}}
