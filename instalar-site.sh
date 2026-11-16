@@ -113,6 +113,7 @@ Wants=network-online.target
 EnvironmentFile=/etc/updown-central.env
 ExecStart=/usr/bin/python3 /opt/updown-central/central_api.py
 DynamicUser=yes
+StateDirectory=updown-central
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

@@ -46,6 +46,32 @@ CAMPO_LOGIN = os.environ.get('IXC_CAMPO_LOGIN', 'hotsite_email')
 CAMPO_SENHA = os.environ.get('IXC_CAMPO_SENHA', 'senha')
 TABELA_CONSUMO = os.environ.get('IXC_TABELA_CONSUMO', 'radusuarios_consumo_m')
 
+
+# ----- pagamento com cartao (Cielo API E-commerce + Silent Order Post) -----
+# O numero do cartao NUNCA passa por este servico: o navegador do cliente envia o cartao direto
+# para a Cielo (Silent Order Post) e este servico so recebe um token de uso unico (PaymentToken).
+CARTAO_ATIVO = os.environ.get('CARTAO_ATIVO', '0') == '1'
+CIELO_AMBIENTE = 'producao' if os.environ.get('CIELO_AMBIENTE', 'sandbox').lower().startswith('prod') else 'sandbox'
+_SANDBOX = CIELO_AMBIENTE == 'sandbox'
+# no sandbox, se nada for informado, valem as credenciais publicas de teste da documentacao da Cielo
+CIELO_MERCHANT_ID = os.environ.get('CIELO_MERCHANT_ID', '832ce400-9c97-4fe7-9d4f-0928675e36cd' if _SANDBOX else '')
+CIELO_MERCHANT_KEY = os.environ.get('CIELO_MERCHANT_KEY', 'IIHc5F35mO9BS1FQ64ZGaqqYPG9L1OvMh2ld8kYv' if _SANDBOX else '')
+CIELO_SOP_CLIENT_ID = os.environ.get('CIELO_SOP_CLIENT_ID', '6631016d-72e6-4db1-a2d2-9cbe61464925' if _SANDBOX else '')
+CIELO_SOP_CLIENT_SECRET = os.environ.get('CIELO_SOP_CLIENT_SECRET', 'flY1vN/dDx/5A9g/shJoOlTEiZfb9bZrig/WtJojqMM=' if _SANDBOX else '')
+CIELO_OAUTH = os.environ.get('CIELO_URL_OAUTH', 'https://authsandbox.braspag.com.br/oauth2/token' if _SANDBOX else 'https://auth.braspag.com.br/oauth2/token')
+CIELO_SOP = os.environ.get('CIELO_URL_SOP', 'https://transactionsandbox.pagador.com.br/post/api/public/v2/accesstoken' if _SANDBOX else 'https://transaction.pagador.com.br/post/api/public/v2/accesstoken')
+CIELO_API = os.environ.get('CIELO_URL_API', 'https://apisandbox.cieloecommerce.cielo.com.br' if _SANDBOX else 'https://api.cieloecommerce.cielo.com.br').rstrip('/')
+CIELO_CONSULTA = os.environ.get('CIELO_URL_CONSULTA', 'https://apiquerysandbox.cieloecommerce.cielo.com.br' if _SANDBOX else 'https://apiquery.cieloecommerce.cielo.com.br').rstrip('/')
+CARTAO_DESCRICAO = re.sub(r'[^A-Za-z0-9 ]', '', os.environ.get('CARTAO_DESCRICAO', 'UPDOWN'))[:13]
+CARTAO_ACEITA_VENCIDA = os.environ.get('CARTAO_ACEITA_VENCIDA', '0') == '1'
+# baixa automatica no IXC depois do pagamento aprovado (so em producao e com estes campos preenchidos)
+BAIXA_FILIAL = os.environ.get('IXC_BAIXA_FILIAL', '')
+BAIXA_CONTA = os.environ.get('IXC_BAIXA_CONTA', '')
+BAIXA_PLANEJAMENTO = os.environ.get('IXC_BAIXA_PLANEJAMENTO', '')
+BAIXA_TIPO = os.environ.get('IXC_BAIXA_TIPO', '')
+DIARIO = os.path.join(os.environ.get('STATE_DIRECTORY', '/var/lib/updown-central').split(':')[0], 'cartao.jsonl')
+_trava_cartao = threading.Lock()
+
 _sessoes = {}
 _tentativas = {}
 _trava = threading.Lock()
@@ -164,6 +190,7 @@ def faturas(id_cliente, abertas=True):
             'contrato': str(f.get('id_contrato') or ''),
             'documento': str(f.get('documento') or f.get('id') or ''),
             'pago_em': str(f.get('pagamento_data') or '')[:10] if not abertas else '',
+            'cartao': bool(abertas and cartao_configurado() and (CARTAO_ACEITA_VENCIDA or not (venc and venc < hoje))),
             'valor_pago': num(f.get('valor_recebido')) if not abertas else 0,
         })
     return saida
@@ -266,6 +293,248 @@ def consumo(id_cliente):
     return saida
 
 
+# ----------------------------------------------------------------------------- cartao (Cielo)
+class ErroCielo(Exception):
+    pass
+
+
+def cartao_configurado():
+    return bool(CARTAO_ATIVO and CIELO_MERCHANT_ID and CIELO_MERCHANT_KEY and CIELO_SOP_CLIENT_ID and CIELO_SOP_CLIENT_SECRET)
+
+
+def baixa_configurada():
+    return bool(not _SANDBOX and BAIXA_FILIAL and BAIXA_CONTA and BAIXA_PLANEJAMENTO and BAIXA_TIPO)
+
+
+def _http(metodo, url, cab=None, corpo=None, timeout=30):
+    """Devolve (codigo_http, json_ou_None). Levanta ErroCielo so quando nao houve resposta."""
+    req = urllib.request.Request(url, data=corpo, method=metodo)
+    for k, v in (cab or {}).items():
+        req.add_header(k, v)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=ssl.create_default_context()) as r:
+            cod, dados = r.status, r.read()
+    except urllib.error.HTTPError as e:
+        cod, dados = e.code, e.read()
+    except Exception as e:
+        raise ErroCielo('sem resposta de %s (%s)' % (url.split('/')[2], type(e).__name__))
+    try:
+        return cod, json.loads(dados.decode('utf-8', 'replace') or 'null')
+    except ValueError:
+        return cod, None
+
+
+def sop_token():
+    """Token de uso unico para o navegador enviar o cartao direto a Cielo."""
+    basic = base64.b64encode(('%s:%s' % (CIELO_SOP_CLIENT_ID, CIELO_SOP_CLIENT_SECRET)).encode()).decode()
+    cod, j = _http('POST', CIELO_OAUTH, {'Authorization': 'Basic ' + basic, 'Content-Type': 'application/x-www-form-urlencoded'},
+                   b'grant_type=client_credentials')
+    if cod != 200 and cod != 201 or not isinstance(j, dict) or not j.get('access_token'):
+        raise ErroCielo('a Cielo recusou as credenciais do Silent Order Post (HTTP %s)' % cod)
+    cod, j = _http('POST', CIELO_SOP, {'Authorization': 'Bearer ' + j['access_token'], 'MerchantId': CIELO_MERCHANT_ID,
+                                       'Content-Type': 'application/json'}, b'')
+    if cod not in (200, 201) or not isinstance(j, dict) or not j.get('AccessToken'):
+        raise ErroCielo('a Cielo nao gerou o token do Silent Order Post (HTTP %s)' % cod)
+    return j['AccessToken']
+
+
+def _diario_ler():
+    reg = []
+    try:
+        with open(DIARIO, encoding='utf-8') as f:
+            for linha in f:
+                try:
+                    reg.append(json.loads(linha))
+                except ValueError:
+                    pass
+    except FileNotFoundError:
+        pass
+    return reg
+
+
+def _diario_gravar(item):
+    item = dict(item, quando=time.strftime('%Y-%m-%d %H:%M:%S'))
+    os.makedirs(os.path.dirname(DIARIO), exist_ok=True)
+    with open(DIARIO, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(item, ensure_ascii=False) + '\n')
+        f.flush()
+        os.fsync(f.fileno())
+    return item
+
+
+def situacao_cartao(id_fatura):
+    """Ultimo registro de cartao desta fatura no ambiente atual (ou None)."""
+    ult = None
+    for r in _diario_ler():
+        if str(r.get('fatura')) == str(id_fatura) and r.get('ambiente') == CIELO_AMBIENTE:
+            ult = r
+    return ult
+
+
+def _cab_cielo():
+    return {'MerchantId': CIELO_MERCHANT_ID, 'MerchantKey': CIELO_MERCHANT_KEY, 'Content-Type': 'application/json',
+            'RequestId': secrets.token_hex(16)}
+
+
+def cielo_consultar(pedido):
+    """Procura na Cielo um pedido cujo resultado ficou incerto. Devolve o Payment (dict) ou None se nao existe."""
+    cod, j = _http('GET', '%s/1/sales?merchantOrderId=%s' % (CIELO_CONSULTA, pedido), _cab_cielo())
+    if cod == 404:
+        return None
+    if cod != 200 or not isinstance(j, dict):
+        raise ErroCielo('consulta do pedido falhou (HTTP %s)' % cod)
+    pays = j.get('Payments') or []
+    if not pays:
+        return None
+    achado = None
+    for p in pays:
+        cod, j = _http('GET', '%s/1/sales/%s' % (CIELO_CONSULTA, p.get('PaymentId')), _cab_cielo())
+        if cod != 200 or not isinstance(j, dict) or not isinstance(j.get('Payment'), dict):
+            raise ErroCielo('consulta do pagamento falhou (HTTP %s)' % cod)
+        achado = j['Payment']
+        if int(achado.get('Status') or 0) == 2:                # se houver mais de um, o confirmado prevalece
+            break
+    return achado
+
+
+def cielo_cobrar(pedido, centavos, nome, token, bandeira):
+    cartao = {'PaymentToken': token}
+    if bandeira:
+        cartao['Brand'] = bandeira
+    corpo = json.dumps({'MerchantOrderId': pedido, 'Customer': {'Name': nome[:120] or 'Cliente'},
+                        'Payment': {'Type': 'CreditCard', 'Amount': centavos, 'Installments': 1, 'Capture': True,
+                                    'SoftDescriptor': CARTAO_DESCRICAO, 'CreditCard': cartao}}).encode('utf-8')
+    cod, j = _http('POST', CIELO_API + '/1/sales/', _cab_cielo(), corpo, timeout=45)
+    if cod == 404:                                            # a documentacao do SOP cita /v2/sales; 404 nao gera cobranca
+        cod, j = _http('POST', CIELO_API + '/v2/sales/', _cab_cielo(), corpo, timeout=45)
+    return cod, j
+
+
+def baixar_no_ixc(id_fatura, valor, pedido, autorizacao):
+    v = '%.2f' % valor
+    r = _ixc('fn_areceber_recebimentos_baixas_novo', {
+        'filial_id': BAIXA_FILIAL, 'id_receber': str(id_fatura), 'conta_': BAIXA_CONTA, 'id_conta': BAIXA_PLANEJAMENTO,
+        'tipo_recebimento': BAIXA_TIPO, 'data': time.strftime('%d/%m/%Y'), 'valor_parcela': v, 'credito': v, 'debito': v,
+        'valor_total_recebido': v,
+        'historico': 'Cartao de credito pela Central do Assinante - Cielo pedido %s autorizacao %s' % (pedido, autorizacao or '-'),
+    }, listar=False)
+    if not isinstance(r, dict) or r.get('type') != 'success':
+        raise ErroIXC('IXC nao confirmou a baixa: %s' % str((r or {}).get('message', r))[:160])
+
+
+def _finalizar_aprovado(base, pay, valor):
+    """Pagamento confirmado na Cielo: registra e tenta dar baixa no IXC."""
+    aut = str(pay.get('AuthorizationCode') or pay.get('ProofOfSale') or '')
+    reg = dict(base, status='aprovado', pagamento=str(pay.get('PaymentId') or ''), tid=str(pay.get('Tid') or ''), autorizacao=aut)
+    _diario_gravar(reg)
+    if _SANDBOX:
+        _diario_gravar(dict(reg, status='teste', obs='sandbox: nenhuma cobranca real e nenhuma baixa no IXC'))
+        return {'status': 'aprovado', 'teste': True, 'autorizacao': aut, 'valor': valor}
+    if not baixa_configurada():
+        _diario_gravar(dict(reg, status='baixa_pendente', obs='baixa automatica nao configurada'))
+        return {'status': 'aprovado', 'baixa': 'pendente', 'autorizacao': aut, 'valor': valor}
+    try:
+        baixar_no_ixc(base['fatura'], valor, base['pedido'], aut)
+        _diario_gravar(dict(reg, status='baixado'))
+        return {'status': 'aprovado', 'baixa': 'ok', 'autorizacao': aut, 'valor': valor}
+    except ErroIXC as e:
+        _diario_gravar(dict(reg, status='baixa_pendente', obs=str(e)[:200]))
+        return {'status': 'aprovado', 'baixa': 'pendente', 'autorizacao': aut, 'valor': valor}
+
+
+def cartao_liberado(fat, id_cliente):
+    """Pode oferecer cartao para esta fatura? Devolve (ok, motivo)."""
+    if str(fat.get('id_cliente')) != str(id_cliente) or str(fat.get('status')) != 'A':
+        return False, 'Esta fatura não está mais em aberto.'
+    venc = str(fat.get('data_vencimento') or '')[:10]
+    if not CARTAO_ACEITA_VENCIDA and venc and venc < time.strftime('%Y-%m-%d'):
+        return False, 'Fatura vencida: pague por Pix ou boleto, que já trazem o valor atualizado.'
+    return True, ''
+
+
+def _resolver_incerto(ult, valor):
+    """Um pagamento anterior ficou sem resposta: confere na Cielo antes de permitir nova tentativa."""
+    pay = cielo_consultar(ult['pedido'])
+    if pay is None:
+        _diario_gravar(dict(ult, status='nao_encontrado'))
+        return None
+    st = int(pay.get('Status') or 0)
+    if st == 2:
+        return _finalizar_aprovado(ult, pay, valor)
+    if st in (3, 10, 11, 13):
+        _diario_gravar(dict(ult, status='negado', retorno=str(pay.get('ReturnCode') or '')))
+        return None
+    raise ErroCielo('pagamento anterior ainda em analise (status %s)' % st)
+
+
+def cartao_iniciar(sessao, id_fatura):
+    fat = fatura_do_cliente(sessao['id'], id_fatura)
+    if not fat:
+        return 404, {'erro': 'fatura', 'mensagem': 'Fatura não encontrada.'}
+    ok, motivo = cartao_liberado(fat, sessao['id'])
+    if not ok:
+        return 409, {'erro': 'cartao', 'mensagem': motivo}
+    valor = num(fat.get('valor_aberto')) or num(fat.get('valor'))
+    with _trava_cartao:
+        ult = situacao_cartao(id_fatura)
+        if ult and ult.get('status') in ('aprovado', 'baixado', 'baixa_pendente'):
+            return 409, {'erro': 'pago', 'mensagem': 'Esta fatura já foi paga com cartão. A baixa aparece em instantes.'}
+        if ult and ult.get('status') in ('iniciado', 'incerto'):
+            try:
+                r = _resolver_incerto(ult, valor)
+            except ErroCielo as e:
+                sys.stderr.write('cartao: %s\n' % e)
+                return 409, {'erro': 'analise', 'mensagem': 'Estamos confirmando um pagamento anterior desta fatura. Tente de novo em alguns minutos ou fale com a gente.'}
+            if r:
+                return 200, dict(r, ja_pago=True)
+    return 200, {'sop': sop_token(), 'ambiente': 'sandbox' if _SANDBOX else 'production', 'valor': valor, 'teste': _SANDBOX}
+
+
+def cartao_pagar(sessao, id_fatura, token, bandeira):
+    if not re.fullmatch(r'[0-9a-fA-F\-]{30,40}', token or ''):
+        return 400, {'erro': 'token', 'mensagem': 'Não foi possível ler o cartão. Tente novamente.'}
+    bandeira = bandeira if bandeira in ('Visa', 'Master', 'Amex', 'Elo', 'Hipercard', 'Diners', 'Discover', 'JCB', 'Aura') else ''
+    with _trava_cartao:                                        # uma cobranca por vez: evita clique duplo e abas duplicadas
+        fat = fatura_do_cliente(sessao['id'], id_fatura)
+        if not fat:
+            return 404, {'erro': 'fatura', 'mensagem': 'Fatura não encontrada.'}
+        ok, motivo = cartao_liberado(fat, sessao['id'])
+        if not ok:
+            return 409, {'erro': 'cartao', 'mensagem': motivo}
+        ult = situacao_cartao(id_fatura)
+        if ult and ult.get('status') in ('iniciado', 'incerto', 'aprovado', 'baixado', 'baixa_pendente'):
+            return 409, {'erro': 'analise', 'mensagem': 'Já existe um pagamento com cartão em andamento para esta fatura.'}
+        valor = num(fat.get('valor_aberto')) or num(fat.get('valor'))
+        centavos = int(round(valor * 100))
+        if centavos <= 0:
+            return 409, {'erro': 'valor', 'mensagem': 'Não foi possível calcular o valor desta fatura.'}
+        pedido = 'F%sT%s%s' % (id_fatura, time.strftime('%y%m%d%H%M%S'), secrets.token_hex(2).upper())
+        base = {'fatura': str(id_fatura), 'cliente': sessao['id'], 'pedido': pedido, 'centavos': centavos, 'ambiente': CIELO_AMBIENTE}
+        _diario_gravar(dict(base, status='iniciado'))           # gravado ANTES de cobrar: nada se perde se o servico cair
+        try:
+            cod, j = cielo_cobrar(pedido, centavos, sessao['nome'], token, bandeira)
+        except ErroCielo as e:
+            _diario_gravar(dict(base, status='incerto', obs=str(e)[:200]))
+            return 202, {'status': 'incerto', 'mensagem': 'Não recebemos a confirmação da operadora. NÃO pague de novo: estamos conferindo e a fatura será atualizada.'}
+        pay = j.get('Payment') if isinstance(j, dict) else None
+        if cod in (200, 201) and isinstance(pay, dict):
+            st = int(pay.get('Status') or 0)
+            if st == 2:
+                return 200, _finalizar_aprovado(base, pay, valor)
+            if st in (0, 1, 12):
+                _diario_gravar(dict(base, status='incerto', pagamento=str(pay.get('PaymentId') or ''), obs='status %s' % st))
+                return 202, {'status': 'incerto', 'mensagem': 'A operadora ainda está analisando o pagamento. NÃO pague de novo: a fatura será atualizada.'}
+            _diario_gravar(dict(base, status='negado', retorno=str(pay.get('ReturnCode') or ''), obs=str(pay.get('ReturnMessage') or '')[:120]))
+            return 200, {'status': 'negado', 'mensagem': 'Pagamento não autorizado pelo banco emissor. Confira os dados ou use outro cartão.'}
+        if 400 <= cod < 500:                                   # requisicao recusada: nada foi cobrado
+            det = j[0].get('Message') if isinstance(j, list) and j and isinstance(j[0], dict) else ''
+            _diario_gravar(dict(base, status='erro', obs='HTTP %s %s' % (cod, str(det)[:120])))
+            sys.stderr.write('cartao: Cielo HTTP %s %s\n' % (cod, str(det)[:120]))
+            return 200, {'status': 'negado', 'mensagem': 'A operadora não aceitou a transação. Confira os dados do cartão ou tente outra forma de pagamento.'}
+        _diario_gravar(dict(base, status='incerto', obs='HTTP %s' % cod))
+        return 202, {'status': 'incerto', 'mensagem': 'Não recebemos a confirmação da operadora. NÃO pague de novo: estamos conferindo e a fatura será atualizada.'}
+
+
 # ----------------------------------------------------------------------------- sessao
 def nova_sessao(cli):
     tok = secrets.token_urlsafe(32)
@@ -355,6 +624,25 @@ class H(BaseHTTPRequestHandler):
             with _trava:
                 _sessoes.pop(self._token(), None)
             return self._json(200, {'ok': True}, cookie=self._cookie('', 0))
+        m = re.fullmatch(re.escape(PREFIXO) + r'/faturas/(\d{1,12})/cartao/(iniciar|pagar)', rota)
+        if m:
+            s = self._sessao()
+            if not s:
+                return
+            if not cartao_configurado():
+                return self._json(404, {'erro': 'cartao', 'mensagem': 'Pagamento com cartão indisponível.'})
+            try:
+                if m.group(2) == 'iniciar':
+                    cod, r = cartao_iniciar(s, m.group(1))
+                else:
+                    cod, r = cartao_pagar(s, m.group(1), str(corpo.get('token') or ''), str(corpo.get('bandeira') or ''))
+                return self._json(cod, r)
+            except ErroCielo as e:
+                self.log_message('cartao: %s', e)
+                return self._json(502, {'erro': 'cielo', 'mensagem': 'O pagamento com cartão está indisponível agora. Use Pix ou boleto, ou tente em instantes.'})
+            except ErroIXC as e:
+                self.log_message('ixc: %s', e)
+                return self._json(502, {'erro': 'ixc', 'mensagem': 'Não conseguimos consultar a fatura agora. Tente em instantes.'})
         self._json(404, {'erro': 'rota'})
 
     def login(self, corpo):
@@ -390,7 +678,7 @@ class H(BaseHTTPRequestHandler):
             return
         try:
             if rota == PREFIXO + '/eu':
-                return self._json(200, {'id': s['id'], 'nome': s['nome'], 'documento': s['doc'], 'telefone': s['telefone'], 'email': s['email']})
+                return self._json(200, {'id': s['id'], 'nome': s['nome'], 'documento': s['doc'], 'telefone': s['telefone'], 'email': s['email'], 'cartao': cartao_configurado(), 'cartao_teste': bool(cartao_configurado() and _SANDBOX)})
             if rota == PREFIXO + '/faturas':
                 return self._json(200, {'abertas': faturas(s['id'], True), 'pagas': faturas(s['id'], False)})
             if rota == PREFIXO + '/contratos':
@@ -462,7 +750,42 @@ def testar(login=None):
             tenta('Pix da fatura %s' % ab[0]['id'], lambda: 'copia e cola com %d caracteres' % len(pix(ab[0]['id'])['copia_cola']))
 
 
+def testar_cartao():
+    print('CARTAO_ATIVO      :', 'sim' if CARTAO_ATIVO else 'NAO (defina CARTAO_ATIVO=1)')
+    print('CIELO_AMBIENTE    :', CIELO_AMBIENTE, '(cobrancas de teste, sem baixa no IXC)' if _SANDBOX else '(COBRANCAS REAIS)')
+    print('Merchant ID       :', (CIELO_MERCHANT_ID[:8] + '...') if CIELO_MERCHANT_ID else '(vazio)')
+    print('Merchant Key      :', 'configurada' if CIELO_MERCHANT_KEY else '(vazia)')
+    print('SOP ClientId      :', (CIELO_SOP_CLIENT_ID[:8] + '...') if CIELO_SOP_CLIENT_ID else '(vazio) - solicite a credencial do Silent Order Post na Cielo')
+    print('Baixa automatica  :', 'configurada' if baixa_configurada() else ('desligada no sandbox' if _SANDBOX else 'NAO configurada (IXC_BAIXA_FILIAL/CONTA/PLANEJAMENTO/TIPO): pagamentos ficam como baixa pendente'))
+    print('Diario            :', DIARIO)
+    try:
+        t = sop_token()
+        print('  [OK]   token do Silent Order Post gerado (%d caracteres). Nenhuma cobranca foi feita.' % len(t))
+    except Exception as e:
+        print('  [FALHA] Silent Order Post:', e)
+
+
+def pendencias():
+    ult = {}
+    for r in _diario_ler():
+        ult[(r.get('ambiente'), r.get('pedido'))] = r
+    pend = [r for r in ult.values() if r.get('ambiente') == 'producao' and r.get('status') in ('iniciado', 'incerto', 'aprovado', 'baixa_pendente')]
+    if not pend:
+        print('Nenhuma pendencia de cartao.')
+    for r in pend:
+        print('%s | fatura %s | cliente %s | R$ %.2f | pedido %s | %s | %s' % (r.get('quando'), r.get('fatura'), r.get('cliente'),
+              (r.get('centavos') or 0) / 100.0, r.get('pedido'),
+              {'baixa_pendente': 'PAGO na Cielo, FALTA a baixa no IXC', 'aprovado': 'PAGO na Cielo, FALTA a baixa no IXC'}.get(r.get('status'), 'resultado INCERTO: confira no portal da Cielo'),
+              r.get('obs', '')))
+
+
 if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--testar-cartao':
+        testar_cartao()
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == '--pendencias':
+        pendencias()
+        sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--testar':
         testar(sys.argv[2] if len(sys.argv) > 2 else None)
         sys.exit(0)

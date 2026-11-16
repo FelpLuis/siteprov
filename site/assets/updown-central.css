@@ -55,6 +55,12 @@
 @keyframes ca-gira{to{transform:rotate(360deg)}}
 .ca-vazio{padding:28px;text-align:center;border-radius:18px;border:1px dashed var(--line2);color:var(--body);font-size:15px}
 
+.ca-cartao label{display:block;margin-top:12px;font-size:13px;font-weight:700;color:var(--h)}
+.ca-cartao .ca-in{height:50px;font-size:17px}
+.ca-duo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ca-cartao{max-width:460px}
+.ca-okbox{text-align:center;border-style:solid;border-color:var(--ok)}
+.ca-okic{width:54px;height:54px;margin:0 auto 10px;display:grid;place-items:center;border-radius:50%;background:var(--okbg);color:var(--oktx);font-size:28px;font-weight:800}
 /* ---------- entrada (login), mobile first ---------- */
 .ca-entrada{display:flex;flex-direction:column;gap:22px}
 .ca-login{max-width:none;width:100%;margin:0;padding:24px 20px}

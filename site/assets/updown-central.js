@@ -5,7 +5,7 @@
   var API = '/api/central';
   var IXC_CENTRAL = 'https://ixc.updown.com.br/central_assinante_web/';
   var WA = 'https://wa.me/551333616081?text=';
-  var st = { fase: 'carregando', aba: 'inicio', eu: null, fat: null, con: null, cons: null, erro: '', enviando: false, pix: {}, pixErro: {}, pixCarregando: '', copiado: '' };
+  var st = { fase: 'carregando', aba: 'inicio', eu: null, fat: null, con: null, cons: null, erro: '', enviando: false, pix: {}, pixErro: {}, pixCarregando: '', copiado: '', cartao: {} };
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function brl(v) { return 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -84,15 +84,36 @@
       '<button class="ca-btn pix sm" data-act="copiar" data-txt="' + esc(p.copia_cola) + '" data-k="pix' + f.id + '" style="margin-top:10px">' + (st.copiado === 'pix' + f.id ? 'Código copiado ✓' : 'Copiar código Pix') + '</button>' +
       '<div class="ca-sub" style="font-size:13px">Abra o app do seu banco, escolha Pix copia e cola e cole o código. A baixa pode levar alguns minutos.</div></div>';
   }
+  function blocoCartao(f) {
+    var c = st.cartao[f.id];
+    if (!c) return '';
+    if (c.fase === 'abrindo') return '<div class="ca-pix">' + carregando('Preparando o pagamento seguro...') + '</div>';
+    if (c.fase === 'ok') return '<div class="ca-pix ca-okbox"><div class="ca-okic">✓</div><div style="font:700 19px \'Space Grotesk\',Inter,sans-serif">Pagamento aprovado</div>' +
+      '<div class="ca-sub">' + brl(c.valor) + ' no cartão de crédito' + (c.autorizacao ? ' · autorização ' + esc(c.autorizacao) : '') + '.</div>' +
+      '<div class="ca-sub" style="font-size:13px">' + (c.teste ? 'Ambiente de TESTE: nenhuma cobrança real foi feita e a fatura não foi baixada.' : 'A fatura será atualizada em instantes. Guarde o número de autorização.') + '</div></div>';
+    if (c.fase === 'incerto') return '<div class="ca-pix"><div class="ca-msg erro" style="margin:0" role="alert">' + esc(c.msg) + '</div></div>';
+    if (c.fase === 'falha') return '<div class="ca-pix"><div class="ca-msg erro" style="margin:0" role="alert">' + esc(c.msg) + '</div></div>';
+    return '<form class="ca-pix ca-cartao" data-form="cartao" data-id="' + esc(f.id) + '" novalidate autocomplete="on">' +
+      (c.teste ? '<div class="ca-msg info" style="margin:0 0 12px"><b>Ambiente de teste da Cielo.</b> Nenhuma cobrança real é feita.</div>' : '') +
+      '<div style="font-weight:800;margin-bottom:4px">Cartão de crédito · ' + brl(c.valor) + ' à vista</div>' +
+      '<label for="cc-nome' + f.id + '">Nome impresso no cartão</label><input class="ca-in bp-sop-cardholdername" id="cc-nome' + f.id + '" autocomplete="cc-name" autocapitalize="characters" spellcheck="false">' +
+      '<label for="cc-num' + f.id + '">Número do cartão</label><input class="ca-in bp-sop-cardnumber" id="cc-num' + f.id + '" inputmode="numeric" autocomplete="cc-number" data-mask="cartao" maxlength="23" placeholder="0000 0000 0000 0000">' +
+      '<div class="ca-duo"><div><label for="cc-val' + f.id + '">Validade</label><input class="ca-in bp-sop-cardexpirationdate" id="cc-val' + f.id + '" inputmode="numeric" autocomplete="cc-exp" data-mask="validade" maxlength="7" placeholder="MM/AAAA"></div>' +
+      '<div><label for="cc-cvv' + f.id + '">CVV</label><input class="ca-in bp-sop-cardcvvc" id="cc-cvv' + f.id + '" inputmode="numeric" autocomplete="cc-csc" data-mask="cvv" maxlength="4" placeholder="000"></div></div>' +
+      (c.erro ? '<div class="ca-msg erro" role="alert">' + esc(c.erro) + '</div>' : '') +
+      '<button class="ca-btn full" type="submit"' + (c.fase === 'pagando' ? ' disabled' : '') + '>' + (c.fase === 'pagando' ? 'Processando... não feche esta tela' : 'Pagar ' + brl(c.valor)) + '</button>' +
+      '<div class="ca-sub" style="font-size:12.5px;margin-top:10px">🔒 Os dados do cartão vão direto para a Cielo. A UPDOWN não armazena o número do seu cartão.</div></form>';
+  }
   function itemFatura(f) {
     return '<div class="ca-item"><div><div class="tit">Vencimento ' + data(f.vencimento) +
       (f.vencida ? '<span class="ca-tag erro">Vencida</span>' : '<span class="ca-tag alerta">Em aberto</span>') + '</div>' +
       '<div class="inf">Fatura nº ' + esc(f.documento) + (f.contrato ? ' · Contrato ' + esc(f.contrato) : '') + '</div></div>' +
       '<div class="ca-valor">' + brl(f.valor) + '</div>' +
       '<div class="acoes"><button class="ca-btn pix sm" data-act="pix" data-id="' + esc(f.id) + '"' + (st.pixCarregando === f.id ? ' disabled' : '') + '>' + (st.pixCarregando === f.id ? 'Gerando Pix...' : 'Pagar com Pix') + '</button>' +
-      '<a class="ca-btn sm" href="' + API + '/faturas/' + esc(f.id) + '/boleto" target="_blank" rel="noopener">Abrir boleto (PDF)</a>' +
+      (f.cartao && st.eu && st.eu.cartao ? '<button class="ca-btn sm" data-act="cartao" data-id="' + esc(f.id) + '">Pagar com cartão</button>' : '') +
+      '<a class="ca-btn sec sm" href="' + API + '/faturas/' + esc(f.id) + '/boleto" target="_blank" rel="noopener">Abrir boleto (PDF)</a>' +
       (f.linha_digitavel ? '<button class="ca-btn sec sm" data-act="copiar" data-txt="' + esc(f.linha_digitavel) + '" data-k="ld' + f.id + '">' + (st.copiado === 'ld' + f.id ? 'Copiado ✓' : 'Copiar código de barras') + '</button>' : '') +
-      '</div>' + blocoPix(f) + '</div>';
+      '</div>' + blocoPix(f) + blocoCartao(f) + '</div>';
   }
   function telaFaturas() {
     if (!st.fat) return carregando('Buscando suas faturas...');
@@ -184,7 +205,89 @@
     else window.open(WA + encodeURIComponent('Olá! Sou cliente UPDOWN (cadastro nº ' + (st.eu ? st.eu.id : '') + ') e preciso de atendimento.'), '_blank', 'noopener');
   }
 
+  /* ---------- cartao (Cielo Silent Order Post) ---------- */
+  var SOP_URL = 'https://www.pagador.com.br/post/scripts/silentorderpost-1.0.min.js';
+  function carregaSop() {
+    return new Promise(function (ok, falha) {
+      if (window.bpSop_silentOrderPost) return ok();
+      var sc = document.createElement('script'); sc.src = SOP_URL; sc.onload = function () { window.bpSop_silentOrderPost ? ok() : falha(); }; sc.onerror = falha;
+      document.head.appendChild(sc);
+    });
+  }
+  function bandeira(n) {
+    if (/^4/.test(n)) return 'Visa';
+    if (/^(5[1-5]|2[2-7])/.test(n)) return 'Master';
+    if (/^3[47]/.test(n)) return 'Amex';
+    if (/^(606282|3841)/.test(n)) return 'Hipercard';
+    if (/^(4011|4312|4389|4514|4576|5041|5066|5067|509|6277|6362|6363|650|6516|6550)/.test(n)) return 'Elo';
+    if (/^3(0[0-5]|[68])/.test(n)) return 'Diners';
+    return '';
+  }
+  function luhn(n) { var s = 0, d, alt = false; for (var i = n.length - 1; i >= 0; i--) { d = +n[i]; if (alt) { d *= 2; if (d > 9) d -= 9; } s += d; alt = !alt; } return n.length >= 13 && s % 10 === 0; }
+  function limpaCartao(id) { ['cc-nome', 'cc-num', 'cc-val', 'cc-cvv'].forEach(function (p) { var i = document.getElementById(p + id); if (i) i.value = ''; }); }
+  function abrirCartao(id) {
+    if (st.cartao[id] && st.cartao[id].fase !== 'falha') { if (st.cartao[id].fase === 'form') { limpaCartao(id); delete st.cartao[id]; desenha(); } return; }
+    st.cartao[id] = { fase: 'abrindo' }; desenha();
+    Promise.all([api('POST', '/faturas/' + id + '/cartao/iniciar', {}), carregaSop().catch(function () { throw new Error('Não foi possível carregar o pagamento seguro da Cielo. Verifique sua conexão.'); })]).then(function (r) {
+      var j = r[0];
+      if (j.ja_pago) { st.cartao[id] = { fase: 'ok', valor: j.valor, autorizacao: j.autorizacao, teste: j.teste }; desenha(); return carrega(); }
+      st.cartao[id] = { fase: 'form', sop: j.sop, ambiente: j.ambiente, valor: j.valor, teste: j.teste }; desenha();
+      var n = document.getElementById('cc-nome' + id); if (n) n.focus();
+    }).catch(function (e) { if (e.status !== 401) { st.cartao[id] = { fase: 'falha', msg: e.message }; desenha(); } });
+  }
+  function pagarCartao(id) {
+    var c = st.cartao[id];
+    if (!c || c.fase !== 'form') return;
+    var nome = document.getElementById('cc-nome' + id).value.trim(), numero = document.getElementById('cc-num' + id).value.replace(/\D/g, ''),
+        val = document.getElementById('cc-val' + id).value, cvv = document.getElementById('cc-cvv' + id).value;
+    var m = /^(\d{2})\/(\d{4})$/.exec(val), hoje = new Date();
+    var erro = nome.length < 3 ? 'Digite o nome como está no cartão.' : !luhn(numero) ? 'Confira o número do cartão.' :
+      (!m || +m[1] < 1 || +m[1] > 12 || new Date(+m[2], +m[1], 1) <= hoje) ? 'Confira a validade (MM/AAAA).' : !/^\d{3,4}$/.test(cvv) ? 'Confira o código de segurança (CVV).' : '';
+    if (erro) { c.erro = erro; return desenha(); }
+    c.erro = ''; c.fase = 'pagando'; desenha();
+    var band = bandeira(numero);
+    function recomeca(msg) {        // o token da Cielo vale para uma tentativa: pede outro e mantém o formulário
+      api('POST', '/faturas/' + id + '/cartao/iniciar', {}).then(function (j) {
+        if (j.ja_pago) { limpaCartao(id); st.cartao[id] = { fase: 'ok', valor: j.valor, autorizacao: j.autorizacao, teste: j.teste }; carrega(); }
+        else st.cartao[id] = { fase: 'form', sop: j.sop, ambiente: j.ambiente, valor: j.valor, teste: j.teste, erro: msg };
+        desenha();
+      }).catch(function (e) { if (e.status !== 401) { limpaCartao(id); st.cartao[id] = { fase: 'falha', msg: msg + ' ' + e.message }; desenha(); } });
+    }
+    try {
+      window.bpSop_silentOrderPost({
+        accessToken: c.sop, environment: c.ambiente, language: 'PT', enableBinQuery: false, enableVerifyCard: false, enableTokenize: false, cvvRequired: true,
+        onSuccess: function (r) {
+          if (!r || !r.PaymentToken) return recomeca('A Cielo não validou o cartão. Confira os dados.');
+          api('POST', '/faturas/' + id + '/cartao/pagar', { token: r.PaymentToken, bandeira: r.Brand || band }).then(function (j) {
+            limpaCartao(id);
+            if (j.status === 'aprovado') { st.cartao[id] = { fase: 'ok', valor: j.valor, autorizacao: j.autorizacao, teste: j.teste }; desenha(); if (!j.teste) setTimeout(carrega, 4000); }
+            else if (j.status === 'incerto') { st.cartao[id] = { fase: 'incerto', msg: j.mensagem }; desenha(); }
+            else recomeca(j.mensagem || 'Pagamento não autorizado.');
+          }).catch(function (e) {
+            limpaCartao(id);
+            if (e.status === 401) return;
+            // sem resposta do nosso servidor: o resultado é desconhecido, então não deixa tentar de novo às cegas
+            st.cartao[id] = e.status ? { fase: 'falha', msg: e.message } : { fase: 'incerto', msg: 'Perdemos a conexão durante o pagamento. NÃO pague de novo: recarregue a página em alguns minutos para ver se a fatura foi paga.' };
+            desenha();
+          });
+        },
+        onError: function () { recomeca('A Cielo não conseguiu ler o cartão. Confira os dados e tente de novo.'); },
+        onInvalid: function (v) { var t = v && v[0] && (v[0].Message || v[0].message); recomeca(t ? 'Confira os dados do cartão: ' + t : 'Confira os dados do cartão.'); }
+      });
+    } catch (ex) { recomeca('Não foi possível iniciar o pagamento seguro.'); }
+  }
+  document.addEventListener('input', function (e) {
+    var i = e.target, mk = i.getAttribute && i.getAttribute('data-mask');
+    if (!mk) return;
+    var d = i.value.replace(/\D/g, '');
+    if (mk === 'cartao') i.value = d.slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ');
+    else if (mk === 'validade') { d = d.slice(0, 6); if (d.length === 4 && !/^(0[1-9]|1[0-2])20/.test(d)) d = d.slice(0, 2) + '20' + d.slice(2); i.value = d.length > 2 ? d.slice(0, 2) + '/' + d.slice(2) : d; }
+    else if (mk === 'cvv') i.value = d.slice(0, 4);
+  });
+
   document.addEventListener('submit', function (e) {
+    var fc = e.target.closest && e.target.closest('[data-form="cartao"]');
+    if (fc) { e.preventDefault(); return pagarCartao(fc.getAttribute('data-id')); }
     var f = e.target.closest && e.target.closest('[data-form="login"]');
     if (!f) return;
     e.preventDefault();
@@ -206,9 +309,10 @@
     var act = b.getAttribute('data-act');
     if (act === 'versenha') { st.verSenha = !st.verSenha; desenha(); var cs = document.getElementById('ca-senha'); if (cs) cs.focus(); }
     else if (act === 'aba') { st.aba = b.getAttribute('data-aba'); desenha(); var t = document.getElementById('central-app'); if (t && t.getBoundingClientRect().top < 0) t.scrollIntoView({ block: 'start' }); }
-    else if (act === 'sair') { api('POST', '/logout', {}).catch(function () {}).then(function () { st.fase = 'login'; st.eu = null; st.erro = ''; st.aba = 'inicio'; st.pix = {}; contato(); desenha(); }); }
+    else if (act === 'sair') { api('POST', '/logout', {}).catch(function () {}).then(function () { st.fase = 'login'; st.eu = null; st.erro = ''; st.aba = 'inicio'; st.pix = {}; st.cartao = {}; contato(); desenha(); }); }
     else if (act === 'recarregar') { carrega(); desenha(); }
     else if (act === 'chat') abrirChat();
+    else if (act === 'cartao') abrirCartao(b.getAttribute('data-id'));
     else if (act === 'copiar') {
       var txt = b.getAttribute('data-txt'), k = b.getAttribute('data-k');
       var ok = function () { st.copiado = k; desenha(); setTimeout(function () { if (st.copiado === k) { st.copiado = ''; desenha(); } }, 2500); };
@@ -226,7 +330,7 @@
 
   document.addEventListener('updown:render', desenha);   // o site redesenha a página ao mudar de celular para desktop
   if (!document.getElementById('ud-central-css')) {
-    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=3';
+    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=4';
     document.head.appendChild(l);
   }
   window.UpDownCentral = { iniciar: function () { desenha(); inicio(); } };
