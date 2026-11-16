@@ -395,7 +395,7 @@
 
   document.addEventListener('updown:render', desenha);   // o site redesenha a página ao mudar de celular para desktop
   if (!document.getElementById('ud-central-css')) {
-    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=7';
+    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=8';
     document.head.appendChild(l);
   }
   window.UpDownCentral = { iniciar: function () { desenha(); inicio(); } };
