@@ -105,7 +105,7 @@
       '<label for="cc-nome' + f.id + '">Nome impresso no cartão</label><input class="ca-in bp-sop-cardholdername" id="cc-nome' + f.id + '" autocomplete="cc-name" autocapitalize="characters" spellcheck="false">' +
       '<label for="cc-num' + f.id + '">Número do cartão</label><input class="ca-in bp-sop-cardnumber" id="cc-num' + f.id + '" inputmode="numeric" autocomplete="cc-number" data-mask="cartao" maxlength="19" placeholder="0000 0000 0000 0000">' +
       '<div class="ca-duo"><div><label for="cc-val' + f.id + '">Validade</label><input class="ca-in bp-sop-cardexpirationdate" id="cc-val' + f.id + '" inputmode="numeric" autocomplete="cc-exp" data-mask="validade" maxlength="7" placeholder="MM/AAAA"></div>' +
-      '<div><label for="cc-cvv' + f.id + '">CVV</label><input class="ca-in bp-sop-cardcvvc" id="cc-cvv' + f.id + '" inputmode="numeric" autocomplete="cc-csc" data-mask="cvv" maxlength="4" placeholder="000"></div></div>' +
+      '<div><label for="cc-cvv' + f.id + '">CVV</label><input class="ca-in bp-sop-cardcvv bp-sop-cardcvvc" id="cc-cvv' + f.id + '" inputmode="numeric" autocomplete="cc-csc" data-mask="cvv" maxlength="4" placeholder="000"></div></div>' +
       (c.erro ? '<div class="ca-msg erro" role="alert">' + esc(c.erro) + '</div>' : '') +
       '<button class="ca-btn full" type="submit"' + (c.fase === 'pagando' ? ' disabled' : '') + '>' + (c.fase === 'pagando' ? 'Processando... não feche esta tela' : 'Pagar ' + brl(c.valor)) + '</button>' +
       '<div class="ca-sub" style="font-size:12.5px;margin-top:10px">🔒 Os dados do cartão vão direto para a Cielo. A UPDOWN não armazena o número do seu cartão.</div></form></div>';
@@ -287,7 +287,15 @@
           });
         },
         onError: function () { recomeca('A Cielo não conseguiu ler o cartão. Confira os dados e tente de novo.'); },
-        onInvalid: function (v) { var t = v && v[0] && (v[0].Message || v[0].message); recomeca(t ? 'Confira os dados do cartão: ' + t : 'Confira os dados do cartão.'); }
+        onInvalid: function (v) {
+          try { console.warn('Cielo SOP recusou os campos:', JSON.stringify(v)); } catch (e2) { /* sem console */ }
+          var NOMES = { cardnumber: 'número do cartão', cardholdername: 'nome', holder: 'nome', cardexpirationdate: 'validade', expirationdate: 'validade', cardcvv: 'CVV', cardcvvc: 'CVV', securitycode: 'CVV' };
+          var txt = (Array.isArray(v) ? v : [v]).filter(Boolean).map(function (i) {
+            var campo = String(i.Field || i.field || '').toLowerCase().replace(/[^a-z]/g, ''), m = i.Message || i.message || '';
+            return (NOMES[campo] ? NOMES[campo] + ': ' : (campo ? campo + ': ' : '')) + m;
+          }).filter(Boolean).join(' · ');
+          recomeca(txt ? 'Confira os dados do cartão. ' + txt : 'Confira os dados do cartão.');
+        }
       });
     } catch (ex) { recomeca('Não foi possível iniciar o pagamento seguro.'); }
   }
