@@ -1,5 +1,5 @@
-/* UpDown — Central do Assinante (lado do navegador).
-   Fala só com /api/central (serviço no servidor da UpDown). O token do IXC nunca vem para cá. */
+/* UPDOWN — Central do Assinante (lado do navegador).
+   Fala só com /api/central (serviço no servidor da UPDOWN). O token do IXC nunca vem para cá. */
 (function () {
   'use strict';
   var API = '/api/central';
@@ -59,7 +59,7 @@
     var itens = [[I.pix, 'Pague em segundos', 'Pix copia e cola ou boleto, sem sair da tela.'], [I.doc, 'Seus contratos', 'Veja o que está ativo e o que falta assinar.'],
                  [I.graf, 'Seu consumo', 'Acompanhe o uso da sua fibra mês a mês.'], [I.chat, 'Atendimento direto', 'Chat com a equipe, já com o seu cadastro.']];
     var form = '<div class="ca-card ca-login"><div class="ca-sel">' + ic(I.cad) + ' Acesso seguro</div><h1 class="ca-h1">Central do Assinante</h1>' +
-      '<p class="ca-sub">Entre com o mesmo usuário e senha que você já usa na UpDown.</p>' +
+      '<p class="ca-sub">Entre com o mesmo usuário e senha que você já usa na UPDOWN.</p>' +
       '<form data-form="login" novalidate>' +
       '<label for="ca-login">Usuário <span>CPF/CNPJ ou e-mail</span></label><input class="ca-in" id="ca-login" name="login" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next" value="' + esc(lembrado()) + '" required>' +
       '<label for="ca-senha">Senha</label><div class="ca-senha"><input class="ca-in" id="ca-senha" name="senha" type="' + (st.verSenha ? 'text' : 'password') + '" autocomplete="current-password" enterkeyhint="go" required>' +
@@ -153,7 +153,7 @@
       (Array.isArray(st.con) ? (pend ? pend + ' aguardando sua assinatura.' : 'Tudo certo com seus contratos.') : 'Carregando...') + '</div><button class="ca-btn sec sm" data-act="aba" data-aba="contratos" style="margin-top:14px">Ver contratos</button></div>';
     var k3 = '<div class="ca-card ca-kpi"><div class="rot">Sua conexão</div><div class="val">' + (online === null ? '…' : (online ? 'Online' : 'Offline')) + '</div><div class="det">' +
       (online === null ? 'Carregando...' : (online ? 'Sua fibra está conectada.' : 'Não detectamos sua conexão ativa agora.')) + '</div><button class="ca-btn sec sm" data-act="aba" data-aba="consumo" style="margin-top:14px">Ver consumo</button></div>';
-    var k4 = '<div class="ca-card ca-kpi"><div class="rot">Atendimento</div><div class="val" style="font-size:22px">Fale com a UpDown</div><div class="det">Chat com a nossa equipe, já identificado com o seu cadastro.</div><button class="ca-btn sm" data-act="chat" style="margin-top:14px">Abrir chat</button></div>';
+    var k4 = '<div class="ca-card ca-kpi"><div class="rot">Atendimento</div><div class="val" style="font-size:22px">Fale com a UPDOWN</div><div class="det">Chat com a nossa equipe, já identificado com o seu cadastro.</div><button class="ca-btn sm" data-act="chat" style="margin-top:14px">Abrir chat</button></div>';
     return '<div class="ca-grid">' + k1 + k2 + k3 + k4 + '</div>';
   }
   function telaApp() {
@@ -181,7 +181,7 @@
     contato();
     var ico = document.querySelector('.opa_ico');
     if (ico) ico.click();
-    else window.open(WA + encodeURIComponent('Olá! Sou cliente UpDown (cadastro nº ' + (st.eu ? st.eu.id : '') + ') e preciso de atendimento.'), '_blank', 'noopener');
+    else window.open(WA + encodeURIComponent('Olá! Sou cliente UPDOWN (cadastro nº ' + (st.eu ? st.eu.id : '') + ') e preciso de atendimento.'), '_blank', 'noopener');
   }
 
   document.addEventListener('submit', function (e) {

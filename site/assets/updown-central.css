@@ -1,4 +1,4 @@
-/* Central do Assinante UpDown */
+/* Central do Assinante UPDOWN */
 #central-app{font-family:Inter,system-ui,sans-serif;color:var(--h);min-height:420px}
 #central-app *{box-sizing:border-box}
 .ca-card{background:var(--surf);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:0 30px 70px -34px var(--sh)}

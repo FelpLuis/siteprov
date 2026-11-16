@@ -1,4 +1,4 @@
-/* UpDown — tela inicial do webchat Opa Suite com Nome e Telefone.
+/* UPDOWN — tela inicial do webchat Opa Suite com Nome e Telefone.
    Substitui o "Continuar sem efetuar login" por um formulário curto; ao enviar,
    abre o chat e manda a primeira mensagem com os dados para o atendente. */
 (function () {
@@ -23,10 +23,10 @@
   }
 
   var CSS = '' +
-    /* janela do chat com a cara da UpDown */
+    /* janela do chat com a cara da UPDOWN */
     '.opa_chat.ud-chat{border-radius:18px!important;overflow:hidden!important;border:0!important;box-shadow:0 30px 70px -20px rgba(11,6,86,.55),0 0 0 1px rgba(0,4,255,.18)!important;font-family:Inter,system-ui,sans-serif!important}' +
     '.opa_chat.ud-chat .opa_cabecalho{position:relative!important;background:linear-gradient(135deg,#0004FF,#110170)!important;min-height:46px}' +
-    '.opa_chat.ud-chat .opa_cabecalho::before{content:"Atendimento UpDown";position:absolute;left:16px;top:50%;transform:translateY(-50%);font:700 15px "Space Grotesk",Inter,sans-serif;color:#fff;pointer-events:none}' +
+    '.opa_chat.ud-chat .opa_cabecalho::before{content:"Atendimento UPDOWN";position:absolute;left:16px;top:50%;transform:translateY(-50%);font:700 15px "Space Grotesk",Inter,sans-serif;color:#fff;pointer-events:none}' +
     '.opa_chat.ud-chat .opa_cabecalho::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,#00CEFF,#9B00FF)}' +
     /* tela inicial: sem rolagem, formulario centralizado */
     '.opa_corpo.ud-inicio{overflow:hidden!important;display:flex!important;flex-direction:column!important;justify-content:center!important;padding:0!important;background:#F4F6FF!important}' +
@@ -60,7 +60,7 @@
     f.className = 'ud-wc';
     f.noValidate = true;
     f.innerHTML =
-      '<h3>Fale com a UpDown</h3>' +
+      '<h3>Fale com a UPDOWN</h3>' +
       (cen ? '<div class="ud-id">✓ Você está identificado como cliente nº ' + String(cen.id).replace(/[^0-9]/g, '') + '</div>' : '<p>Informe seus dados para começarmos.</p>') +
       '<label for="ud-wc-nome">Nome</label><input id="ud-wc-nome" name="nome" autocomplete="name" placeholder="Seu nome" required>' +
       '<div class="ud-err" id="ud-wc-nome-err" aria-live="polite"></div>' +
@@ -92,9 +92,9 @@
         if (opa.estrutura.corpo) opa.estrutura.corpo.classList.remove('ud-inicio');
         if (box.parentNode) box.parentNode.removeChild(box);
         opa.chat_rodape();
-        var msg = 'Olá! Vim pelo site da UpDown.<br>Nome: ' + n.replace(/</g, '&lt;') + '<br>Telefone: ' + mask(d);
+        var msg = 'Olá! Vim pelo site da UPDOWN.<br>Nome: ' + n.replace(/</g, '&lt;') + '<br>Telefone: ' + mask(d);
         var c2 = window.UpDownCentralContato;
-        if (c2) msg = 'Olá! Estou na Central do Assinante da UpDown.<br>Nome: ' + n.replace(/</g, '&lt;') + '<br>Telefone: ' + mask(d) + '<br>Cliente IXC nº ' + c2.id + (c2.documento ? '<br>Documento: ' + c2.documento : '') + (c2.contratos ? '<br>Contrato(s): ' + c2.contratos : '');
+        if (c2) msg = 'Olá! Estou na Central do Assinante da UPDOWN.<br>Nome: ' + n.replace(/</g, '&lt;') + '<br>Telefone: ' + mask(d) + '<br>Cliente IXC nº ' + c2.id + (c2.documento ? '<br>Documento: ' + c2.documento : '') + (c2.contratos ? '<br>Contrato(s): ' + c2.contratos : '');
         setTimeout(function () {
           try { opa.socket.emit('mensagem', '', '', { tipo: 'texto', conteudo: msg.replace(/<br>/g, '\n') }); } catch (er) { /* sem conexão */ }
         }, 400);
