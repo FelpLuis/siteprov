@@ -123,6 +123,26 @@ def so_digitos(s):
     return re.sub(r'\D', '', s or '')
 
 
+def doc_valido(d):
+    """Confere os digitos verificadores de um CPF (11) ou CNPJ (14) so com numeros."""
+    if not d.isdigit() or len(set(d)) == 1:
+        return False
+    if len(d) == 11:
+        for n in (9, 10):
+            r = sum(int(d[i]) * (n + 1 - i) for i in range(n)) * 10 % 11 % 10
+            if r != int(d[n]):
+                return False
+        return True
+    if len(d) == 14:
+        for n in (12, 13):
+            pesos = ([5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] if n == 12 else [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+            r = sum(int(d[i]) * pesos[i] for i in range(n)) % 11
+            if (0 if r < 2 else 11 - r) != int(d[n]):
+                return False
+        return True
+    return False
+
+
 def mascara_doc(doc):
     d = so_digitos(doc)
     if len(d) == 11:
@@ -494,9 +514,14 @@ def cartao_iniciar(sessao, id_fatura):
     return 200, {'sop': sop_token(), 'ambiente': 'sandbox' if _SANDBOX else 'production', 'valor': valor, 'teste': _SANDBOX}
 
 
-def cartao_pagar(sessao, id_fatura, token, bandeira):
+def cartao_pagar(sessao, id_fatura, token, bandeira, documento='', titular=''):
     if not re.fullmatch(r'[0-9a-fA-F\-]{30,40}', token or ''):
         return 400, {'erro': 'token', 'mensagem': 'Não foi possível ler o cartão. Tente novamente.'}
+    documento = so_digitos(documento)
+    if documento and not doc_valido(documento):
+        return 400, {'erro': 'documento', 'mensagem': 'Confira o CPF ou CNPJ do titular do cartão.'}
+    documento = documento or sessao.get('doc_num', '')       # sem o campo, vale o documento do cadastro
+    titular = re.sub(r'[^A-Za-zÀ-ÿ .\'-]', '', titular or '').strip()[:60] or sessao['nome']
     bandeira = bandeira if bandeira in ('Visa', 'Master', 'Amex', 'Elo', 'Hipercard', 'Diners', 'Discover', 'JCB', 'Aura') else ''
     with _trava_cartao:                                        # uma cobranca por vez: evita clique duplo e abas duplicadas
         fat = fatura_do_cliente(sessao['id'], id_fatura)
@@ -516,7 +541,7 @@ def cartao_pagar(sessao, id_fatura, token, bandeira):
         base = {'fatura': str(id_fatura), 'cliente': sessao['id'], 'pedido': pedido, 'centavos': centavos, 'ambiente': CIELO_AMBIENTE}
         _diario_gravar(dict(base, status='iniciado'))           # gravado ANTES de cobrar: nada se perde se o servico cair
         try:
-            cod, j = cielo_cobrar(pedido, centavos, sessao['nome'], token, bandeira, sessao.get('doc_num', ''))
+            cod, j = cielo_cobrar(pedido, centavos, titular, token, bandeira, documento)
         except ErroCielo as e:
             _diario_gravar(dict(base, status='incerto', obs=str(e)[:200]))
             return 202, {'status': 'incerto', 'mensagem': 'Não recebemos a confirmação da operadora. NÃO pague de novo: estamos conferindo e a fatura será atualizada.'}
@@ -640,7 +665,8 @@ class H(BaseHTTPRequestHandler):
                 if m.group(2) == 'iniciar':
                     cod, r = cartao_iniciar(s, m.group(1))
                 else:
-                    cod, r = cartao_pagar(s, m.group(1), str(corpo.get('token') or ''), str(corpo.get('bandeira') or ''))
+                    cod, r = cartao_pagar(s, m.group(1), str(corpo.get('token') or ''), str(corpo.get('bandeira') or ''),
+                                           str(corpo.get('documento') or '')[:20], str(corpo.get('titular') or '')[:80])
                 return self._json(cod, r)
             except ErroCielo as e:
                 self.log_message('cartao: %s', e)

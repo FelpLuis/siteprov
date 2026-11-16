@@ -57,6 +57,7 @@
 
 .ca-cartao label{display:block;margin-top:12px;font-size:13px;font-weight:700;color:var(--h)}
 .ca-cartao .ca-in{height:50px;font-size:17px}
+.ca-dica{margin-top:5px;font-size:12.5px;line-height:1.4;color:var(--muted)}
 .ca-duo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .ca-okbox{text-align:center;border-style:solid;border-color:var(--ok)}
 .ca-okic{width:54px;height:54px;margin:0 auto 10px;display:grid;place-items:center;border-radius:50%;background:var(--okbg);color:var(--oktx);font-size:28px;font-weight:800}

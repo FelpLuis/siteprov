@@ -104,6 +104,8 @@
       '<div style="font-weight:800;margin-bottom:4px">Cartão de crédito · ' + brl(c.valor) + ' à vista</div>' +
       '<label for="cc-nome' + f.id + '">Nome impresso no cartão</label><input class="ca-in bp-sop-cardholdername" id="cc-nome' + f.id + '" autocomplete="cc-name" autocapitalize="characters" spellcheck="false">' +
       '<label for="cc-num' + f.id + '">Número do cartão</label><input class="ca-in bp-sop-cardnumber" id="cc-num' + f.id + '" inputmode="numeric" autocomplete="cc-number" data-mask="cartao" maxlength="19" placeholder="0000 0000 0000 0000">' +
+      '<label for="cc-doc' + f.id + '">CPF ou CNPJ do titular do cartão</label><input class="ca-in" id="cc-doc' + f.id + '" inputmode="numeric" autocomplete="off" data-mask="doc" maxlength="18" placeholder="000.000.000-00">' +
+      '<div class="ca-dica">Pode ser o cartão de outra pessoa: informe o documento de quem é o dono do cartão.</div>' +
       '<div class="ca-duo"><div><label for="cc-val' + f.id + '">Validade</label><input class="ca-in bp-sop-cardexpirationdate" id="cc-val' + f.id + '" inputmode="numeric" autocomplete="cc-exp" data-mask="validade" maxlength="7" placeholder="MM/AAAA"></div>' +
       '<div><label for="cc-cvv' + f.id + '">CVV</label><input class="ca-in bp-sop-cardcvv bp-sop-cardcvvc" id="cc-cvv' + f.id + '" inputmode="numeric" autocomplete="cc-csc" data-mask="cvv" maxlength="4" placeholder="000"></div></div>' +
       (c.erro ? '<div class="ca-msg erro" role="alert">' + esc(c.erro) + '</div>' : '') +
@@ -238,7 +240,19 @@
     return d.replace(/(\d{4})(?=\d)/g, '$1 ');
   }
   function luhn(n) { var s = 0, d, alt = false; for (var i = n.length - 1; i >= 0; i--) { d = +n[i]; if (alt) { d *= 2; if (d > 9) d -= 9; } s += d; alt = !alt; } return n.length >= 13 && s % 10 === 0; }
-  function limpaCartao(id) { ['cc-nome', 'cc-num', 'cc-val', 'cc-cvv'].forEach(function (p) { var i = document.getElementById(p + id); if (i) i.value = ''; }); }
+  function docValido(d) {
+    if (!/^\d+$/.test(d) || /^(\d)\1+$/.test(d)) return false;
+    var i, n, r, t;
+    if (d.length === 11) { for (n = 9; n < 11; n++) { for (t = 0, i = 0; i < n; i++) t += +d[i] * (n + 1 - i); r = t * 10 % 11 % 10; if (r !== +d[n]) return false; } return true; }
+    if (d.length === 14) { for (n = 12; n < 14; n++) { var p = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]; for (t = 0, i = 0; i < n; i++) t += +d[i] * p[i]; r = t % 11; if ((r < 2 ? 0 : 11 - r) !== +d[n]) return false; } return true; }
+    return false;
+  }
+  function fmtDoc(v) {
+    var d = String(v || '').replace(/\D/g, '').slice(0, 14);
+    if (d.length <= 11) return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2');
+    return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})$/, '$1.$2.$3/$4-$5');
+  }
+  function limpaCartao(id) { ['cc-nome', 'cc-num', 'cc-val', 'cc-cvv', 'cc-doc'].forEach(function (p) { var i = document.getElementById(p + id); if (i) i.value = ''; }); }
   function abrirCartao(id) {
     if (st.cartao[id] && st.cartao[id].fase !== 'falha') { if (st.cartao[id].fase === 'form') { limpaCartao(id); delete st.cartao[id]; desenha(); } return; }
     st.cartao[id] = { fase: 'abrindo' }; desenha();
@@ -254,9 +268,10 @@
     if (!c || c.fase !== 'form') return;
     var nome = document.getElementById('cc-nome' + id).value.trim(), numero = document.getElementById('cc-num' + id).value.replace(/\D/g, ''),
         val = document.getElementById('cc-val' + id).value, cvv = document.getElementById('cc-cvv' + id).value;
+    var doc = document.getElementById('cc-doc' + id).value.replace(/\D/g, '');
     var m = /^(\d{2})\/(\d{4})$/.exec(val), hoje = new Date();
     var erro = nome.length < 3 ? 'Digite o nome como está no cartão.' : (numero.length !== tamCartao(numero) || !luhn(numero)) ? 'Confira o número do cartão.' :
-      (!m || +m[1] < 1 || +m[1] > 12 || new Date(+m[2], +m[1], 1) <= hoje) ? 'Confira a validade (MM/AAAA).' : !/^\d{3,4}$/.test(cvv) ? 'Confira o código de segurança (CVV).' : '';
+      (!m || +m[1] < 1 || +m[1] > 12 || new Date(+m[2], +m[1], 1) <= hoje) ? 'Confira a validade (MM/AAAA).' : !/^\d{3,4}$/.test(cvv) ? 'Confira o código de segurança (CVV).' : !docValido(doc) ? 'Confira o CPF ou CNPJ do titular do cartão.' : '';
     if (erro) { c.erro = erro; return desenha(); }
     c.erro = ''; c.fase = 'pagando'; desenha();
     var band = bandeira(numero);
@@ -273,7 +288,7 @@
         accessToken: c.sop, environment: c.ambiente, language: 'PT', enableBinQuery: false, enableVerifyCard: false, enableTokenize: false, cvvRequired: true,
         onSuccess: function (r) {
           if (!r || !r.PaymentToken) return recomeca('A Cielo não validou o cartão. Confira os dados.');
-          api('POST', '/faturas/' + id + '/cartao/pagar', { token: r.PaymentToken, bandeira: r.Brand || band }).then(function (j) {
+          api('POST', '/faturas/' + id + '/cartao/pagar', { token: r.PaymentToken, bandeira: r.Brand || band, documento: doc, titular: nome }).then(function (j) {
             limpaCartao(id);
             if (j.status === 'aprovado') { st.cartao[id] = { fase: 'ok', valor: j.valor, autorizacao: j.autorizacao, teste: j.teste }; desenha(); if (!j.teste) setTimeout(carrega, 4000); }
             else if (j.status === 'incerto') { st.cartao[id] = { fase: 'incerto', msg: j.mensagem }; desenha(); }
@@ -331,6 +346,7 @@
     if (mk === 'cartao') i.value = fmtCartao(d);
     else if (mk === 'validade') { d = d.slice(0, 6); if (d.length === 4 && !/^(0[1-9]|1[0-2])20/.test(d)) d = d.slice(0, 2) + '20' + d.slice(2); i.value = d.length > 2 ? d.slice(0, 2) + '/' + d.slice(2) : d; }
     else if (mk === 'cvv') i.value = d.slice(0, 4);
+    else if (mk === 'doc') i.value = fmtDoc(d);
   });
   document.addEventListener('input', function (e) { var m = /^cc-(?:nome|num|val|cvv)(\d+)$/.exec(e.target.id || ''); if (m) cartao3d(m[1]); });
 
@@ -379,7 +395,7 @@
 
   document.addEventListener('updown:render', desenha);   // o site redesenha a página ao mudar de celular para desktop
   if (!document.getElementById('ud-central-css')) {
-    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=6';
+    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=7';
     document.head.appendChild(l);
   }
   window.UpDownCentral = { iniciar: function () { desenha(); inicio(); } };
