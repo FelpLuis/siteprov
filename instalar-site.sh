@@ -21,6 +21,16 @@ erro(){ printf '\033[31mERRO: %s\033[0m\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || erro "rode como root (sudo bash instalar-site.sh)"
 
+aviso_central(){
+  [ "${CENTRAL_SEM_TOKEN:-0}" = 1 ] || return 0
+  amarelo ""
+  amarelo "FALTA 1 PASSO para a Central do Assinante funcionar:"
+  amarelo "  1) nano /etc/updown-central.env   -> preencha IXC_TOKEN=ID:TOKEN (token do usuario de API do IXC)"
+  amarelo "  2) systemctl restart updown-central"
+  amarelo "  3) teste: set -a; . /etc/updown-central.env; set +a; python3 /opt/updown-central/central_api.py --testar LOGIN_DE_UM_CLIENTE"
+}
+trap aviso_central EXIT
+
 # 1. Quem esta usando as portas 80 e 443? (nginx ou caddy)
 MODO=""
 for p in 80 443; do
@@ -63,6 +73,45 @@ fi
 mkdir -p "$DESTINO"
 cp -a "$ORIGEM/." "$DESTINO/"
 rm -f "$DESTINO/.htaccess"   # so vale para Apache
+
+# 3b. Central do Assinante (servico que conversa com o IXC; o token fica so neste servidor)
+CENTRAL_SRC="$(dirname "$ORIGEM")/central/central_api.py"
+ENVF="/etc/updown-central.env"
+if [ -f "$CENTRAL_SRC" ] && command -v python3 >/dev/null; then
+  verde "  Instalando o servico da Central do Assinante..."
+  mkdir -p /opt/updown-central
+  install -m 644 "$CENTRAL_SRC" /opt/updown-central/central_api.py
+  if [ ! -f "$ENVF" ]; then
+    ( umask 077; printf 'IXC_URL=https://ixc.updown.com.br\nIXC_TOKEN=\nCENTRAL_PORTA=8787\n' > "$ENVF" )
+  fi
+  chown root:root "$ENVF"; chmod 600 "$ENVF"
+  cat > /etc/systemd/system/updown-central.service <<'UNIT'
+[Unit]
+Description=UpDown - Central do Assinante (ponte com o IXC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/updown-central.env
+ExecStart=/usr/bin/python3 /opt/updown-central/central_api.py
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable -q updown-central
+  systemctl restart updown-central
+  if grep -q '^IXC_TOKEN=$' "$ENVF"; then
+    CENTRAL_SEM_TOKEN=1
+  fi
+fi
 rm -rf "$TMP"
 chown -R root:root "$DESTINO"
 find "$DESTINO" -type d -exec chmod 755 {} +
@@ -121,6 +170,9 @@ $DOMINIO {
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 	}
+
+	# Central do Assinante: /api/central -> servico local
+	reverse_proxy /api/central/* 127.0.0.1:8787
 
 	file_server
 }
@@ -184,6 +236,12 @@ $LISTEN6
     charset utf-8;
 
     # /planos, /planos/ e /planos/index.html servem a mesma pagina
+    # Central do Assinante: /api/central -> servico local
+    location /api/central/ {
+        proxy_pass http://127.0.0.1:8787;
+        proxy_set_header X-Forwarded-For \$remote_addr;
+    }
+
     location / {
         try_files \$uri \$uri/index.html \$uri.html =404;
     }

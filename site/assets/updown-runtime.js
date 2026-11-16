@@ -135,6 +135,7 @@
     }
     document.body.classList.toggle('modal-aberto', !!dlg);
     if (window.UpDownFX) window.UpDownFX(app);
+    document.dispatchEvent(new CustomEvent('updown:render'));
   }
   function schedule() { if (!pending) { pending = true; (window.requestAnimationFrame || setTimeout)(render); } }
 
