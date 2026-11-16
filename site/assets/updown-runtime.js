@@ -148,6 +148,15 @@
       try { localStorage.setItem('updown-tema', next); } catch (err) { /* modo privado */ }
       return;
     }
+    var dd = e.target.closest && e.target.closest('[data-dd-toggle]');
+    document.querySelectorAll('.ud-dd').forEach(function (d) {
+      if (dd && d.contains(dd)) {
+        var abrir = !d.classList.contains('aberto');
+        d.classList.toggle('aberto', abrir);
+        dd.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+        if (!abrir) dd.blur();
+      } else if (!d.contains(e.target)) { d.classList.remove('aberto', 'fechado'); var b = d.querySelector('[data-dd-toggle]'); if (b) b.setAttribute('aria-expanded', 'false'); }
+    });
     var mt = e.target.closest && e.target.closest('[data-menu-toggle]');
     if (mt) {
       var panel = document.getElementById(mt.getAttribute('aria-controls'));
@@ -161,6 +170,7 @@
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && comp && comp.state && comp.state.gradeOpen) comp.setState({ gradeOpen: null });
+    if (e.key === 'Escape') document.querySelectorAll('.ud-dd.aberto, .ud-dd:focus-within').forEach(function (d) { d.classList.remove('aberto'); var b = d.querySelector('[data-dd-toggle]'); if (b) { b.setAttribute('aria-expanded', 'false'); b.blur(); } });
   });
 
   window.UpDownMount = function (components, props) {
