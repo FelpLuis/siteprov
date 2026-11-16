@@ -93,16 +93,22 @@
       '<div class="ca-sub" style="font-size:13px">' + (c.teste ? 'Ambiente de TESTE: nenhuma cobrança real foi feita e a fatura não foi baixada.' : 'A fatura será atualizada em instantes. Guarde o número de autorização.') + '</div></div>';
     if (c.fase === 'incerto') return '<div class="ca-pix"><div class="ca-msg erro" style="margin:0" role="alert">' + esc(c.msg) + '</div></div>';
     if (c.fase === 'falha') return '<div class="ca-pix"><div class="ca-msg erro" style="margin:0" role="alert">' + esc(c.msg) + '</div></div>';
-    return '<form class="ca-pix ca-cartao" data-form="cartao" data-id="' + esc(f.id) + '" novalidate autocomplete="on">' +
+    var c3d = '<div class="ca-c3d" id="c3d' + f.id + '" aria-hidden="true"><div class="ca-c3d-in">' +
+      '<div class="ca-face ca-frente"><div class="ca-c3d-topo"><span class="ca-chip"></span><span class="ca-band" data-c3d="band"></span></div>' +
+      '<div class="ca-c3d-num" data-c3d="num">•••• •••• •••• ••••</div>' +
+      '<div class="ca-c3d-base"><div><small>Nome</small><b data-c3d="nome">SEU NOME</b></div><div><small>Validade</small><b data-c3d="val">MM/AA</b></div></div></div>' +
+      '<div class="ca-face ca-verso"><div class="ca-tarja"></div><div class="ca-cvvbox"><small>CVV</small><b data-c3d="cvv">•••</b></div>' +
+      '<div class="ca-c3d-obs">Pagamento seguro processado pela Cielo</div></div></div></div>';
+    return '<div class="ca-pix ca-pagto">' + c3d + '<form class="ca-cartao" data-form="cartao" data-id="' + esc(f.id) + '" novalidate autocomplete="on">' +
       (c.teste ? '<div class="ca-msg info" style="margin:0 0 12px"><b>Ambiente de teste da Cielo.</b> Nenhuma cobrança real é feita.</div>' : '') +
       '<div style="font-weight:800;margin-bottom:4px">Cartão de crédito · ' + brl(c.valor) + ' à vista</div>' +
       '<label for="cc-nome' + f.id + '">Nome impresso no cartão</label><input class="ca-in bp-sop-cardholdername" id="cc-nome' + f.id + '" autocomplete="cc-name" autocapitalize="characters" spellcheck="false">' +
-      '<label for="cc-num' + f.id + '">Número do cartão</label><input class="ca-in bp-sop-cardnumber" id="cc-num' + f.id + '" inputmode="numeric" autocomplete="cc-number" data-mask="cartao" maxlength="23" placeholder="0000 0000 0000 0000">' +
+      '<label for="cc-num' + f.id + '">Número do cartão</label><input class="ca-in bp-sop-cardnumber" id="cc-num' + f.id + '" inputmode="numeric" autocomplete="cc-number" data-mask="cartao" maxlength="19" placeholder="0000 0000 0000 0000">' +
       '<div class="ca-duo"><div><label for="cc-val' + f.id + '">Validade</label><input class="ca-in bp-sop-cardexpirationdate" id="cc-val' + f.id + '" inputmode="numeric" autocomplete="cc-exp" data-mask="validade" maxlength="7" placeholder="MM/AAAA"></div>' +
       '<div><label for="cc-cvv' + f.id + '">CVV</label><input class="ca-in bp-sop-cardcvvc" id="cc-cvv' + f.id + '" inputmode="numeric" autocomplete="cc-csc" data-mask="cvv" maxlength="4" placeholder="000"></div></div>' +
       (c.erro ? '<div class="ca-msg erro" role="alert">' + esc(c.erro) + '</div>' : '') +
       '<button class="ca-btn full" type="submit"' + (c.fase === 'pagando' ? ' disabled' : '') + '>' + (c.fase === 'pagando' ? 'Processando... não feche esta tela' : 'Pagar ' + brl(c.valor)) + '</button>' +
-      '<div class="ca-sub" style="font-size:12.5px;margin-top:10px">🔒 Os dados do cartão vão direto para a Cielo. A UPDOWN não armazena o número do seu cartão.</div></form>';
+      '<div class="ca-sub" style="font-size:12.5px;margin-top:10px">🔒 Os dados do cartão vão direto para a Cielo. A UPDOWN não armazena o número do seu cartão.</div></form></div>';
   }
   function itemFatura(f) {
     return '<div class="ca-item"><div><div class="tit">Vencimento ' + data(f.vencimento) +
@@ -194,8 +200,9 @@
     el.querySelectorAll('input').forEach(function (i) { vals[i.id] = i.value; });
     document.body.classList.toggle('ca-so-login', st.fase !== 'app');
     el.innerHTML = st.fase === 'carregando' ? carregando('Abrindo a Central...') : st.fase === 'login' ? telaLogin() : telaApp();
-    el.querySelectorAll('input').forEach(function (i) { if (vals[i.id] != null) i.value = vals[i.id]; });
+    el.querySelectorAll('input').forEach(function (i) { if (vals[i.id] != null) i.value = i.getAttribute('data-mask') === 'cartao' && !(st.cartao[i.id.replace('cc-num', '')] || {}).enviando ? fmtCartao(vals[i.id]) : vals[i.id]; });
     if (foco && document.getElementById(foco)) document.getElementById(foco).focus();
+    Object.keys(st.cartao).forEach(cartao3d);
   }
 
   function abrirChat() {
@@ -223,6 +230,13 @@
     if (/^3(0[0-5]|[68])/.test(n)) return 'Diners';
     return '';
   }
+  function tamCartao(n) { return /^3[47]/.test(n) ? 15 : /^3(0[0-5]|[68])/.test(n) ? 14 : 16; }
+  function fmtCartao(v) {
+    var d = String(v || '').replace(/\D/g, ''); d = d.slice(0, tamCartao(d));
+    if (tamCartao(d) === 15) return d.replace(/^(\d{4})(\d{1,6})?(\d{1,5})?$/, function (_, a, b, c) { return a + (b ? ' ' + b : '') + (c ? ' ' + c : ''); });
+    if (tamCartao(d) === 14) return d.replace(/^(\d{4})(\d{1,6})?(\d{1,4})?$/, function (_, a, b, c) { return a + (b ? ' ' + b : '') + (c ? ' ' + c : ''); });
+    return d.replace(/(\d{4})(?=\d)/g, '$1 ');
+  }
   function luhn(n) { var s = 0, d, alt = false; for (var i = n.length - 1; i >= 0; i--) { d = +n[i]; if (alt) { d *= 2; if (d > 9) d -= 9; } s += d; alt = !alt; } return n.length >= 13 && s % 10 === 0; }
   function limpaCartao(id) { ['cc-nome', 'cc-num', 'cc-val', 'cc-cvv'].forEach(function (p) { var i = document.getElementById(p + id); if (i) i.value = ''; }); }
   function abrirCartao(id) {
@@ -241,11 +255,12 @@
     var nome = document.getElementById('cc-nome' + id).value.trim(), numero = document.getElementById('cc-num' + id).value.replace(/\D/g, ''),
         val = document.getElementById('cc-val' + id).value, cvv = document.getElementById('cc-cvv' + id).value;
     var m = /^(\d{2})\/(\d{4})$/.exec(val), hoje = new Date();
-    var erro = nome.length < 3 ? 'Digite o nome como está no cartão.' : !luhn(numero) ? 'Confira o número do cartão.' :
+    var erro = nome.length < 3 ? 'Digite o nome como está no cartão.' : (numero.length !== tamCartao(numero) || !luhn(numero)) ? 'Confira o número do cartão.' :
       (!m || +m[1] < 1 || +m[1] > 12 || new Date(+m[2], +m[1], 1) <= hoje) ? 'Confira a validade (MM/AAAA).' : !/^\d{3,4}$/.test(cvv) ? 'Confira o código de segurança (CVV).' : '';
     if (erro) { c.erro = erro; return desenha(); }
     c.erro = ''; c.fase = 'pagando'; desenha();
     var band = bandeira(numero);
+    var campoNum = document.getElementById('cc-num' + id); if (campoNum) campoNum.value = numero;
     function recomeca(msg) {        // o token da Cielo vale para uma tentativa: pede outro e mantém o formulário
       api('POST', '/faturas/' + id + '/cartao/iniciar', {}).then(function (j) {
         if (j.ja_pago) { limpaCartao(id); st.cartao[id] = { fase: 'ok', valor: j.valor, autorizacao: j.autorizacao, teste: j.teste }; carrega(); }
@@ -276,14 +291,40 @@
       });
     } catch (ex) { recomeca('Não foi possível iniciar o pagamento seguro.'); }
   }
+  function cartao3d(id) {
+    var box = document.getElementById('c3d' + id);
+    if (!box) return;
+    function v(p) { var i = document.getElementById(p + id); return i ? i.value : ''; }
+    function poe(k, t) { var el = box.querySelector('[data-c3d="' + k + '"]'); if (el && el.textContent !== t) { el.textContent = t; el.classList.remove('ca-pisca'); void el.offsetWidth; el.classList.add('ca-pisca'); } }
+    var d = v('cc-num').replace(/\D/g, ''), tam = tamCartao(d), molde = tam === 15 ? '•••• •••••• •••••' : tam === 14 ? '•••• •••••• ••••' : '•••• •••• •••• ••••', k = 0;
+    poe('num', molde.replace(/•/g, function () { return k < d.length ? d[k++] : '•'; }));
+    poe('nome', (v('cc-nome').trim() || 'SEU NOME').toUpperCase().slice(0, 24));
+    var m = /^(\d{2})\/?(\d{0,4})/.exec(v('cc-val'));
+    poe('val', m ? m[1] + '/' + (m[2].length === 4 ? m[2].slice(2) : (m[2] || 'AA')) : 'MM/AA');
+    poe('cvv', v('cc-cvv').replace(/./g, '•') || '•••');
+    poe('band', bandeira(d));
+    box.setAttribute('data-band', bandeira(d) || '');
+  }
+  document.addEventListener('focusin', function (e) { var m = /^cc-cvv(\d+)$/.exec(e.target.id || ''); if (m) { var b = document.getElementById('c3d' + m[1]); if (b) b.classList.add('ca-virado'); } });
+  document.addEventListener('focusout', function (e) { var m = /^cc-cvv(\d+)$/.exec(e.target.id || ''); if (m) { var b = document.getElementById('c3d' + m[1]); if (b) b.classList.remove('ca-virado'); } });
+  document.addEventListener('pointermove', function (e) {
+    var b = e.target.closest && e.target.closest('.ca-c3d');
+    if (!b || b.classList.contains('ca-virado')) return;
+    var r = b.getBoundingClientRect();
+    b.style.setProperty('--tx', (((e.clientX - r.left) / r.width - .5) * 22).toFixed(1) + 'deg');
+    b.style.setProperty('--ty', ((.5 - (e.clientY - r.top) / r.height) * 18).toFixed(1) + 'deg');
+    b.classList.add('ca-mao');
+  }, { passive: true });
+  document.addEventListener('pointerout', function (e) { var b = e.target.closest && e.target.closest('.ca-c3d'); if (b && !b.contains(e.relatedTarget)) b.classList.remove('ca-mao'); }, { passive: true });
   document.addEventListener('input', function (e) {
     var i = e.target, mk = i.getAttribute && i.getAttribute('data-mask');
     if (!mk) return;
     var d = i.value.replace(/\D/g, '');
-    if (mk === 'cartao') i.value = d.slice(0, 19).replace(/(\d{4})(?=\d)/g, '$1 ');
+    if (mk === 'cartao') i.value = fmtCartao(d);
     else if (mk === 'validade') { d = d.slice(0, 6); if (d.length === 4 && !/^(0[1-9]|1[0-2])20/.test(d)) d = d.slice(0, 2) + '20' + d.slice(2); i.value = d.length > 2 ? d.slice(0, 2) + '/' + d.slice(2) : d; }
     else if (mk === 'cvv') i.value = d.slice(0, 4);
   });
+  document.addEventListener('input', function (e) { var m = /^cc-(?:nome|num|val|cvv)(\d+)$/.exec(e.target.id || ''); if (m) cartao3d(m[1]); });
 
   document.addEventListener('submit', function (e) {
     var fc = e.target.closest && e.target.closest('[data-form="cartao"]');
@@ -330,7 +371,7 @@
 
   document.addEventListener('updown:render', desenha);   // o site redesenha a página ao mudar de celular para desktop
   if (!document.getElementById('ud-central-css')) {
-    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=4';
+    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=6';
     document.head.appendChild(l);
   }
   window.UpDownCentral = { iniciar: function () { desenha(); inicio(); } };

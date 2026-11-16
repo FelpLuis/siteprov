@@ -58,9 +58,42 @@
 .ca-cartao label{display:block;margin-top:12px;font-size:13px;font-weight:700;color:var(--h)}
 .ca-cartao .ca-in{height:50px;font-size:17px}
 .ca-duo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.ca-cartao{max-width:460px}
 .ca-okbox{text-align:center;border-style:solid;border-color:var(--ok)}
 .ca-okic{width:54px;height:54px;margin:0 auto 10px;display:grid;place-items:center;border-radius:50%;background:var(--okbg);color:var(--oktx);font-size:28px;font-weight:800}
+/* ---------- cartao 3D animado ---------- */
+.ca-pagto{display:flex;flex-direction:column;gap:18px;align-items:center}
+.ca-pagto .ca-cartao{width:100%;max-width:460px}
+.ca-c3d{--tx:0deg;--ty:0deg;width:min(100%,340px);aspect-ratio:1.586;perspective:1100px;flex:0 0 auto;container-type:inline-size}
+.ca-c3d-in{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .7s cubic-bezier(.2,.8,.2,1);animation:ca-flutua 6s ease-in-out infinite}
+.ca-c3d.ca-mao .ca-c3d-in{animation:none;transform:rotateY(var(--tx)) rotateX(var(--ty));transition:transform .12s ease-out}
+.ca-c3d.ca-virado .ca-c3d-in{animation:none;transform:rotateY(180deg)}
+.ca-face{position:absolute;inset:0;border-radius:18px;padding:7% 7.5%;color:#fff;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;
+ background:radial-gradient(120% 90% at 0% 0%,#00CEFF 0%,rgba(0,206,255,0) 55%),radial-gradient(110% 100% at 100% 100%,#9B00FF 0%,rgba(155,0,255,0) 60%),linear-gradient(135deg,#0004FF,#110170);
+ box-shadow:0 30px 60px -22px rgba(0,4,255,.7),0 0 0 1px rgba(255,255,255,.18) inset;display:flex;flex-direction:column;justify-content:space-between}
+.ca-face::after{content:"";position:absolute;top:-60%;bottom:-60%;width:38%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.34),transparent);transform:rotate(12deg);animation:ca-brilho 5s ease-in-out infinite;pointer-events:none}
+.ca-verso{transform:rotateY(180deg);padding:0;justify-content:flex-start}
+.ca-c3d-topo{display:flex;align-items:center;justify-content:space-between}
+.ca-chip{width:15%;aspect-ratio:1.3;border-radius:6px;background:linear-gradient(135deg,#FFE9A8,#D9A441 60%,#FFF1C4);box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.ca-band{font:700 clamp(15px,5.2cqw,20px)/1 "Space Grotesk",Inter,sans-serif;letter-spacing:.04em;text-transform:uppercase;text-shadow:0 2px 8px rgba(0,0,0,.35)}
+.ca-c3d-num{font:600 6.1cqw/1 ui-monospace,"SF Mono",Consolas,monospace;letter-spacing:.06em;text-shadow:0 2px 8px rgba(0,0,0,.4);white-space:nowrap}
+.ca-c3d-base{display:flex;justify-content:space-between;gap:12px;align-items:flex-end}
+.ca-c3d-base small,.ca-cvvbox small{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
+.ca-c3d-base b{display:block;margin-top:3px;font:600 4cqw/1.1 Inter,sans-serif;letter-spacing:.05em;max-width:58cqw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ca-tarja{height:20%;margin-top:11%;background:#05021f}
+.ca-cvvbox{margin:8% 7.5% 0;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.92);color:#110170;text-align:right}
+.ca-cvvbox small{opacity:.7}
+.ca-cvvbox b{font:700 17px ui-monospace,Consolas,monospace;letter-spacing:.2em}
+.ca-c3d-obs{margin:auto 7.5% 7%;font-size:10.5px;opacity:.8}
+.ca-pisca{animation:ca-pisca .35s ease-out}
+@keyframes ca-pisca{from{opacity:.35;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes ca-flutua{0%,100%{transform:rotateY(-10deg) rotateX(5deg) translateY(0)}50%{transform:rotateY(10deg) rotateX(-4deg) translateY(-6px)}}
+@keyframes ca-brilho{0%,55%{left:-60%}100%{left:130%}}
+@media (min-width:860px){
+ .ca-pagto{flex-direction:row-reverse;align-items:center;justify-content:space-between;gap:36px;padding:24px 28px}
+ .ca-pagto .ca-cartao{flex:1 1 420px}
+ .ca-c3d{width:380px;margin-right:2%}
+}
+@media (prefers-reduced-motion:reduce){.ca-c3d-in,.ca-face::after,.ca-pisca{animation:none!important}}
 /* ---------- entrada (login), mobile first ---------- */
 .ca-entrada{display:flex;flex-direction:column;gap:22px}
 .ca-login{max-width:none;width:100%;margin:0;padding:24px 20px}
