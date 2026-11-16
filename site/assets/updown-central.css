@@ -61,6 +61,25 @@
 .ca-duo{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .ca-okbox{text-align:center;border-style:solid;border-color:var(--ok)}
 .ca-okic{width:54px;height:54px;margin:0 auto 10px;display:grid;place-items:center;border-radius:50%;background:var(--okbg);color:var(--oktx);font-size:28px;font-weight:800}
+/* ---------- fatura em aberto: acoes organizadas (mobile first) ---------- */
+.ca-fat{display:block}
+.ca-fat-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.ca-fat .ca-valor{font-size:24px;white-space:nowrap}
+.ca-fat .tit{line-height:1.35}
+.ca-fat-acoes{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:16px;width:100%}
+.ca-fat-acoes .ca-btn{width:100%;min-height:50px;padding:0 12px;border-radius:14px;font-size:15px;white-space:nowrap;gap:8px}
+.ca-fat-acoes .ca-btn svg{flex:0 0 auto}
+.ca-fat-acoes .ca-btn span{overflow:hidden;text-overflow:ellipsis}
+.ca-fat-acoes .ca-pri{grid-column:1/-1;min-height:54px;font-size:16px}
+.ca-fat-acoes .ca-largo{grid-column:1/-1}
+.ca-fat-acoes .ca-sec2{min-height:46px;font-size:14px}
+@media (min-width:860px){
+ .ca-fat{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:24px}
+ .ca-fat-cab{align-items:center;gap:28px}
+ .ca-fat-acoes{display:flex!important;flex-wrap:wrap;justify-content:flex-end;margin-top:0;width:auto}
+ .ca-fat-acoes .ca-btn,.ca-fat-acoes .ca-pri{width:auto;min-height:44px;font-size:14.5px;padding:0 16px}
+ .ca-fat>.ca-pix{grid-column:1/-1}
+}
 /* ---------- cartao 3D animado (estetica "black": fosco, sobrio, detalhes metalicos) ---------- */
 .ca-pagto{display:flex;flex-direction:column;gap:18px;align-items:center}
 .ca-pagto .ca-cartao{width:100%;max-width:460px}

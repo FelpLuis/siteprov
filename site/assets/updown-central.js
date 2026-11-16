@@ -112,16 +112,24 @@
       '<button class="ca-btn full" type="submit"' + (c.fase === 'pagando' ? ' disabled' : '') + '>' + (c.fase === 'pagando' ? 'Processando... não feche esta tela' : 'Pagar ' + brl(c.valor)) + '</button>' +
       '<div class="ca-sub" style="font-size:12.5px;margin-top:10px">🔒 Os dados do cartão vão direto para a Cielo. A UPDOWN não armazena o número do seu cartão.</div></form></div>';
   }
+  var IB = {
+    pix: 'M12.6 2.6a2.3 2.3 0 0 0-3.2 0L6.7 5.3h.6c.9 0 1.7.3 2.3.9l2.1 2.1c.2.2.5.2.6 0l2.1-2.1c.6-.6 1.4-.9 2.3-.9h.3l-2.7-2.7h.3zM5.2 6.8 2.6 9.4a2.3 2.3 0 0 0 0 3.2l2.6 2.6h2.1c.5 0 .9-.2 1.3-.5l2.1-2.1a1.8 1.8 0 0 1 2.6 0l2.1 2.1c.3.3.8.5 1.3.5h1.3l2.6-2.6a2.3 2.3 0 0 0 0-3.2l-2.6-2.6h-1.3c-.5 0-.9.2-1.3.5l-2.1 2.1a1.8 1.8 0 0 1-2.6 0L8.6 7.3c-.3-.3-.8-.5-1.3-.5H5.2zm11.6 9.9c-.9 0-1.7-.3-2.3-.9l-2.1-2.1a.4.4 0 0 0-.6 0l-2.1 2.1c-.6.6-1.4.9-2.3.9h-.7l2.7 2.7a2.3 2.3 0 0 0 3.2 0l2.7-2.7h-.5z',
+    cartao: 'M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z',
+    pdf: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 13h8v2H8v-2zm0 4h5v2H8v-2z',
+    copiar: 'M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z'
+  };
+  function bi(n) { return '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="' + IB[n] + '"/></svg>'; }
   function itemFatura(f) {
-    return '<div class="ca-item"><div><div class="tit">Vencimento ' + data(f.vencimento) +
+    var temCartao = !!(f.cartao && st.eu && st.eu.cartao), temLd = !!f.linha_digitavel;
+    var pri = '<button class="ca-btn pix ca-pri" data-act="pix" data-id="' + esc(f.id) + '"' + (st.pixCarregando === f.id ? ' disabled' : '') + '>' + bi('pix') + '<span>' + (st.pixCarregando === f.id ? 'Gerando Pix...' : 'Pagar com Pix') + '</span></button>' +
+      (temCartao ? '<button class="ca-btn ca-pri" data-act="cartao" data-id="' + esc(f.id) + '">' + bi('cartao') + '<span>Pagar com cartão</span></button>' : '');
+    var sec = '<a class="ca-btn sec ca-sec2' + (temLd ? '' : ' ca-largo') + '" href="' + API + '/faturas/' + esc(f.id) + '/boleto" target="_blank" rel="noopener">' + bi('pdf') + '<span>Boleto (PDF)</span></a>' +
+      (temLd ? '<button class="ca-btn sec ca-sec2" data-act="copiar" data-txt="' + esc(f.linha_digitavel) + '" data-k="ld' + f.id + '">' + bi('copiar') + '<span>' + (st.copiado === 'ld' + f.id ? 'Copiado ✓' : 'Copiar código') + '</span></button>' : '');
+    return '<div class="ca-item ca-fat"><div class="ca-fat-cab"><div><div class="tit">Vencimento ' + data(f.vencimento) +
       (f.vencida ? '<span class="ca-tag erro">Vencida</span>' : '<span class="ca-tag alerta">Em aberto</span>') + '</div>' +
       '<div class="inf">Fatura nº ' + esc(f.documento) + (f.contrato ? ' · Contrato ' + esc(f.contrato) : '') + '</div></div>' +
-      '<div class="ca-valor">' + brl(f.valor) + '</div>' +
-      '<div class="acoes"><button class="ca-btn pix sm" data-act="pix" data-id="' + esc(f.id) + '"' + (st.pixCarregando === f.id ? ' disabled' : '') + '>' + (st.pixCarregando === f.id ? 'Gerando Pix...' : 'Pagar com Pix') + '</button>' +
-      (f.cartao && st.eu && st.eu.cartao ? '<button class="ca-btn sm" data-act="cartao" data-id="' + esc(f.id) + '">Pagar com cartão</button>' : '') +
-      '<a class="ca-btn sec sm" href="' + API + '/faturas/' + esc(f.id) + '/boleto" target="_blank" rel="noopener">Abrir boleto (PDF)</a>' +
-      (f.linha_digitavel ? '<button class="ca-btn sec sm" data-act="copiar" data-txt="' + esc(f.linha_digitavel) + '" data-k="ld' + f.id + '">' + (st.copiado === 'ld' + f.id ? 'Copiado ✓' : 'Copiar código de barras') + '</button>' : '') +
-      '</div>' + blocoPix(f) + blocoCartao(f) + '</div>';
+      '<div class="ca-valor">' + brl(f.valor) + '</div></div>' +
+      '<div class="acoes ca-fat-acoes' + (temCartao ? ' com-cartao' : '') + '">' + pri + sec + '</div>' + blocoPix(f) + blocoCartao(f) + '</div>';
   }
   function telaFaturas() {
     if (!st.fat) return carregando('Buscando suas faturas...');
@@ -395,7 +403,7 @@
 
   document.addEventListener('updown:render', desenha);   // o site redesenha a página ao mudar de celular para desktop
   if (!document.getElementById('ud-central-css')) {
-    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=8';
+    var l = document.createElement('link'); l.id = 'ud-central-css'; l.rel = 'stylesheet'; l.href = '/assets/updown-central.css?v=9';
     document.head.appendChild(l);
   }
   window.UpDownCentral = { iniciar: function () { desenha(); inicio(); } };
