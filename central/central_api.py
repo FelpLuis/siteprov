@@ -397,11 +397,15 @@ def cielo_consultar(pedido):
     return achado
 
 
-def cielo_cobrar(pedido, centavos, nome, token, bandeira):
+def cielo_cobrar(pedido, centavos, nome, token, bandeira, documento=''):
     cartao = {'PaymentToken': token}
     if bandeira:
         cartao['Brand'] = bandeira
-    corpo = json.dumps({'MerchantOrderId': pedido, 'Customer': {'Name': nome[:120] or 'Cliente'},
+    cliente = {'Name': nome[:120] or 'Cliente'}
+    if len(documento) in (11, 14):                            # a Cielo exige o CPF/CNPJ do pagador (Customer.Identity)
+        cliente['Identity'] = documento
+        cliente['IdentityType'] = 'CPF' if len(documento) == 11 else 'CNPJ'
+    corpo = json.dumps({'MerchantOrderId': pedido, 'Customer': cliente,
                         'Payment': {'Type': 'CreditCard', 'Amount': centavos, 'Installments': 1, 'Capture': True,
                                     'SoftDescriptor': CARTAO_DESCRICAO, 'CreditCard': cartao}}).encode('utf-8')
     cod, j = _http('POST', CIELO_API + '/1/sales/', _cab_cielo(), corpo, timeout=45)
@@ -512,7 +516,7 @@ def cartao_pagar(sessao, id_fatura, token, bandeira):
         base = {'fatura': str(id_fatura), 'cliente': sessao['id'], 'pedido': pedido, 'centavos': centavos, 'ambiente': CIELO_AMBIENTE}
         _diario_gravar(dict(base, status='iniciado'))           # gravado ANTES de cobrar: nada se perde se o servico cair
         try:
-            cod, j = cielo_cobrar(pedido, centavos, sessao['nome'], token, bandeira)
+            cod, j = cielo_cobrar(pedido, centavos, sessao['nome'], token, bandeira, sessao.get('doc_num', ''))
         except ErroCielo as e:
             _diario_gravar(dict(base, status='incerto', obs=str(e)[:200]))
             return 202, {'status': 'incerto', 'mensagem': 'Não recebemos a confirmação da operadora. NÃO pague de novo: estamos conferindo e a fatura será atualizada.'}
@@ -545,6 +549,7 @@ def nova_sessao(cli):
         for k in [k for k, v in _sessoes.items() if v['ate'] < agora]:
             _sessoes.pop(k, None)
         _sessoes[tok] = {'id': str(cli.get('id')), 'nome': nome, 'doc': mascara_doc(cli.get('cnpj_cpf')),
+                         'doc_num': so_digitos(cli.get('cnpj_cpf')),   # fica so na memoria do servidor; nunca vai ao navegador
                          'telefone': fone, 'email': str(cli.get('email') or '').strip(), 'ate': agora + SESSAO_MIN * 60}
     return tok
 
