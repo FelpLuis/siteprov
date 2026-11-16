@@ -77,14 +77,32 @@ rm -f "$DESTINO/.htaccess"   # so vale para Apache
 # 3b. Central do Assinante (servico que conversa com o IXC; o token fica so neste servidor)
 CENTRAL_SRC="$(dirname "$ORIGEM")/central/central_api.py"
 ENVF="/etc/updown-central.env"
+PORTA_CENTRAL=8797
 if [ -f "$CENTRAL_SRC" ] && command -v python3 >/dev/null; then
   verde "  Instalando o servico da Central do Assinante..."
   mkdir -p /opt/updown-central
   install -m 644 "$CENTRAL_SRC" /opt/updown-central/central_api.py
   if [ ! -f "$ENVF" ]; then
-    ( umask 077; printf 'IXC_URL=https://ixc.updown.com.br\nIXC_TOKEN=\nCENTRAL_PORTA=8787\n' > "$ENVF" )
+    ( umask 077; printf 'IXC_URL=https://ixc.updown.com.br\nIXC_TOKEN=\n' > "$ENVF" )
   fi
   chown root:root "$ENVF"; chmod 600 "$ENVF"
+  # porta local do servico: usa a do arquivo; se outro programa ja estiver nela, escolhe uma livre
+  systemctl stop updown-central 2>/dev/null || true
+  PORTA_CENTRAL=$(grep -E '^CENTRAL_PORTA=[0-9]+$' "$ENVF" | tail -1 | cut -d= -f2 || true)
+  PORTA_CENTRAL="${PORTA_CENTRAL:-8797}"
+  porta_ocupada(){ [ -n "$(ss -ltnH "sport = :$1" 2>/dev/null)" ]; }
+  if porta_ocupada "$PORTA_CENTRAL"; then
+    amarelo "  A porta $PORTA_CENTRAL ja esta em uso por outro programa; procurando uma livre..."
+    for p in $(seq 8797 8899); do
+      if ! porta_ocupada "$p"; then PORTA_CENTRAL=$p; break; fi
+    done
+  fi
+  if grep -qE '^CENTRAL_PORTA=' "$ENVF"; then
+    sed -i "s/^CENTRAL_PORTA=.*/CENTRAL_PORTA=$PORTA_CENTRAL/" "$ENVF"
+  else
+    printf 'CENTRAL_PORTA=%s\n' "$PORTA_CENTRAL" >> "$ENVF"
+  fi
+  echo "  Servico da Central na porta local $PORTA_CENTRAL"
   cat > /etc/systemd/system/updown-central.service <<'UNIT'
 [Unit]
 Description=UpDown - Central do Assinante (ponte com o IXC)
@@ -108,6 +126,12 @@ UNIT
   systemctl daemon-reload
   systemctl enable -q updown-central
   systemctl restart updown-central
+  sleep 2
+  if curl -s --max-time 5 "http://127.0.0.1:$PORTA_CENTRAL/api/central/saude" | grep -q '"configurado"'; then
+    echo "  Servico da Central respondendo."
+  else
+    amarelo "  O servico da Central nao respondeu. Veja: journalctl -u updown-central -n 20 --no-pager"
+  fi
   if grep -q '^IXC_TOKEN=$' "$ENVF"; then
     CENTRAL_SEM_TOKEN=1
   fi
@@ -172,7 +196,7 @@ $DOMINIO {
 	}
 
 	# Central do Assinante: /api/central -> servico local
-	reverse_proxy /api/central/* 127.0.0.1:8787
+	reverse_proxy /api/central/* 127.0.0.1:$PORTA_CENTRAL
 
 	file_server
 }
@@ -238,7 +262,7 @@ $LISTEN6
     # /planos, /planos/ e /planos/index.html servem a mesma pagina
     # Central do Assinante: /api/central -> servico local
     location /api/central/ {
-        proxy_pass http://127.0.0.1:8787;
+        proxy_pass http://127.0.0.1:$PORTA_CENTRAL;
         proxy_set_header X-Forwarded-For \$remote_addr;
     }
 

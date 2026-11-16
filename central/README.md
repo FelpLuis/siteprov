@@ -1,6 +1,6 @@
 # Central do Assinante (ponte com o IXC)
 
-`central_api.py` roda no servidor (porta local 8787) e atende o site em `/api/central/...`.
+`central_api.py` roda no servidor (porta local escolhida pelo instalador, padrão 8797) e atende o site em `/api/central/...`.
 O navegador do cliente nunca fala com o IXC nem vê o token.
 
 - Instalação: feita pelo `instalar-site.sh` (serviço `updown-central`).

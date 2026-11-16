@@ -9,7 +9,7 @@ dados do proprio cliente logado.
 Configuracao (arquivo /etc/updown-central.env, lido pelo systemd):
     IXC_URL=https://ixc.updown.com.br
     IXC_TOKEN=ID:TOKEN_DO_USUARIO_DE_API
-    CENTRAL_PORTA=8787            (opcional)
+    CENTRAL_PORTA=8797            (opcional; o instalador escolhe uma porta livre)
 
 Teste de comunicacao com o IXC (rodar no servidor):
     set -a; . /etc/updown-central.env; set +a; python3 central_api.py --testar [login_do_cliente]
@@ -33,7 +33,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 IXC_URL = os.environ.get('IXC_URL', '').rstrip('/')
 IXC_TOKEN = os.environ.get('IXC_TOKEN', '')
-PORTA = int(os.environ.get('CENTRAL_PORTA', '8787'))
+PORTA = int(os.environ.get('CENTRAL_PORTA', '8797'))
 PREFIXO = '/api/central'
 SESSAO_MIN = 30                    # minutos sem uso ate a sessao expirar
 COOKIE = 'ud_central'
