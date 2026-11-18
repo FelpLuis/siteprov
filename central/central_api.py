@@ -165,10 +165,12 @@ def senha_confere(digitada, guardada):
     if not g or not digitada:
         return False
     b = digitada.encode('utf-8')
-    candidatos = [digitada, hashlib.md5(b).hexdigest(), hashlib.sha1(b).hexdigest(), hashlib.sha256(b).hexdigest()]
-    ok = False
-    for c in candidatos:                                      # compara todos, em tempo constante
-        ok = hmac.compare_digest(c.encode(), g.encode()) or hmac.compare_digest(c.lower().encode(), g.lower().encode()) or ok
+    hashes = [hashlib.md5(b).hexdigest(), hashlib.sha1(b).hexdigest(), hashlib.sha256(b).hexdigest()]
+    # Senha em texto: comparação EXATA (maiúsculas contam). Só o hash hexadecimal
+    # é comparado sem caixa, porque o IXC pode gravá-lo em maiúsculas.
+    ok = hmac.compare_digest(digitada.encode('utf-8'), g.encode('utf-8'))
+    for c in hashes:                                          # compara todos, em tempo constante
+        ok = hmac.compare_digest(c.encode(), g.lower().encode()) or ok
     return ok
 
 
@@ -602,10 +604,27 @@ def registra_falha(chave):
         _tentativas.setdefault(chave, []).append(time.time())
 
 
+_csp_janela = [0.0, 0]
+
+
+def _csp_cota():
+    """No máximo 60 relatórios de CSP por minuto no log (o endpoint é público)."""
+    with _trava:
+        agora = time.time()
+        if agora - _csp_janela[0] > 60:
+            _csp_janela[0], _csp_janela[1] = agora, 0
+        _csp_janela[1] += 1
+        return _csp_janela[1] <= 60
+
+
 # ----------------------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
     server_version = 'UpDownCentral'
     sys_version = ''
+    # Sem timeout, quem anuncia Content-Length e não manda o corpo (ou lê a resposta
+    # devagar) prende a thread para sempre (slowloris). Vale por operação de socket,
+    # não para a chamada à Cielo/IXC, que tem timeout próprio.
+    timeout = 30
 
     def log_message(self, fmt, *args):                        # log sem dados do cliente
         sys.stderr.write('%s %s\n' % (time.strftime('%Y-%m-%d %H:%M:%S'), fmt % args))
@@ -639,12 +658,32 @@ class H(BaseHTTPRequestHandler):
             self._json(401, {'erro': 'sessao', 'mensagem': 'Sua sessão expirou. Entre novamente.'})
         return s
 
+    def csp_report(self):
+        """Relatórios de CSP da página de pagamento (PCI-DSS 6.4.3/11.6.1): script que não
+        está na lista aparece no journal. Só registra; nunca guarda dado do cliente."""
+        try:
+            tam = max(0, min(int(self.headers.get('Content-Length', '0')), 8192))
+            rel = json.loads(self.rfile.read(tam).decode('utf-8', 'replace') or '{}')
+        except Exception:
+            rel = {}
+        r = rel.get('csp-report') if isinstance(rel, dict) else None
+        if isinstance(r, dict) and _csp_cota():
+            def corta(v):
+                return re.sub(r'[\x00-\x1f]', '', str(v or ''))[:200]
+            self.log_message('csp: %s bloqueado=%s pagina=%s', corta(r.get('violated-directive') or r.get('effective-directive')),
+                             corta(r.get('blocked-uri')), corta(str(r.get('document-uri') or '').split('?')[0]))
+        self.send_response(204)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
     def do_POST(self):
         rota = self.path.split('?')[0]
+        if rota == PREFIXO + '/csp-report':
+            return self.csp_report()
         if self.headers.get('X-Requested-With') != 'UpDownCentral' or 'application/json' not in self.headers.get('Content-Type', ''):
             return self._json(400, {'erro': 'requisicao'})
         try:
-            tam = min(int(self.headers.get('Content-Length', '0')), 4096)
+            tam = max(0, min(int(self.headers.get('Content-Length', '0')), 4096))   # negativo = read(-1) sem fim
             corpo = json.loads(self.rfile.read(tam).decode('utf-8') or '{}')
         except Exception:
             return self._json(400, {'erro': 'requisicao'})

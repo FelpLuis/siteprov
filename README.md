@@ -121,6 +121,26 @@ Para tirar o site do ar no Caddy: apague o bloco entre `# >>> site-updown` e `# 
 
 Envie o conteúdo de `site/` para `public_html`. O `.htaccess` incluído já força HTTPS, serve `/planos` a partir de `planos/index.html` e configura cache e compressão.
 
+## Cabeçalhos de segurança da Central (PCI-DSS v4.0.1)
+
+O `instalar-site.sh` publica HSTS e uma CSP mínima no site todo e, na `/central`
+(pagamento com cartão via Silent Order Post da Cielo):
+
+- **bloqueando já**: `frame-ancestors 'none'` + `X-Frame-Options DENY`, `base-uri`, `object-src`;
+- **Report-Only**: a lista completa de scripts autorizados (req. 6.4.3). Qualquer script fora
+  da lista gera um registro no journal (req. 11.6.1):
+  `journalctl -u updown-central | grep csp:`
+
+Depois de alguns dias sem violações inesperadas (teste também um pagamento no sandbox),
+passe a bloquear rodando o instalador com `CSP_FORCAR=1`.
+
+Mudou um `<script>` inline de `site/central/index.html`? Recalcule os hashes e troque em
+`CSP_CENTRAL_RO` no instalador:
+
+```bash
+python3 -c "import re,hashlib,base64;h=open('site/central/index.html').read();[print(\"'sha256-%s'\" % base64.b64encode(hashlib.sha256(m.encode()).digest()).decode()) for m in re.findall(r'<script(?![^>]*\\bsrc=)[^>]*>(.*?)</script>',h,re.S)]"
+```
+
 ## Serviços externos usados pelo site
 
 Continuam vindo de fora e não fazem parte deste repositório:

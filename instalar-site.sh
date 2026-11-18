@@ -14,6 +14,7 @@ REPO="${REPO:-FelpLuis/siteprov}"
 BRANCH="${BRANCH:-main}"
 DESTINO="/var/www/site-updown"
 CONF="/etc/nginx/sites-available/site-updown"
+SNIP_CENTRAL="/etc/nginx/snippets/site-updown-central.conf"
 
 verde(){ printf '\033[32m%s\033[0m\n' "$*"; }
 amarelo(){ printf '\033[33m%s\033[0m\n' "$*"; }
@@ -142,6 +143,40 @@ chown -R root:root "$DESTINO"
 find "$DESTINO" -type d -exec chmod 755 {} +
 find "$DESTINO" -type f -exec chmod 644 {} +
 
+# ---------- Cabecalhos de seguranca (PCI-DSS v4.0.1 6.4.3 / 11.6.1) ----------
+# HSTS e CSP minima no site todo. Na /central (pagina de pagamento com o Silent
+# Order Post da Cielo):
+#  - aplicado ja: frame-ancestors 'none' (anti-clickjacking), base-uri, object-src;
+#  - Report-Only: allowlist completa de scripts. Cada violacao vai para o journal
+#    (journalctl -u updown-central | grep csp:). Sem violacoes inesperadas por
+#    alguns dias, rode o instalador com CSP_FORCAR=1 para passar a bloquear.
+# Os hashes 'sha256-...' sao dos <script> inline de site/central/index.html:
+# mudou o HTML, recalcule (ver README).
+HSTS="max-age=31536000"
+CSP_SITE="base-uri 'self'; object-src 'none'"
+CSP_CENTRAL="frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+CIELO="https://www.pagador.com.br https://transactionsandbox.pagador.com.br"
+CSP_CENTRAL_RO="default-src 'self'; \
+script-src 'self' 'wasm-unsafe-eval' \
+'sha256-PrxU4LYLjczhrZQ/aInZ5yYRr1XgqfVOwol7xUMG1zg=' 'sha256-hsS82v4qLKVEOlg0twsfnyRylTmaw15dYyQg42jEl6s=' \
+'sha256-VuCOpBO1UTAV9G4x9wsf6KskRufmbgsXeT74L4N5Wdo=' 'sha256-Rn+X4r4iOq2yuu3hZGSkNj26UJJ1X8He35eYeD4teIY=' \
+'sha256-mUFIfAZLLUwCXDkSvUYUVckDTor8NeOw/QLyoikLEuE=' 'sha256-T/IFI5GIph4E0ISECvJEZo9480irD2xdfMe6ayKL+rE=' \
+$CIELO https://www.googletagmanager.com https://*.google-analytics.com https://vlibras.gov.br https://*.vlibras.gov.br https://opasuite.updown.com.br; \
+style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://vlibras.gov.br https://opasuite.updown.com.br; \
+font-src 'self' data: https://fonts.gstatic.com https://vlibras.gov.br; \
+img-src 'self' data: blob: https:; \
+media-src 'self' blob: https://vlibras.gov.br https://opasuite.updown.com.br; \
+connect-src 'self' $CIELO https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://vlibras.gov.br https://*.vlibras.gov.br https://opasuite.updown.com.br wss://opasuite.updown.com.br; \
+frame-src https://www.googletagmanager.com https://opasuite.updown.com.br; \
+worker-src 'self' blob:; \
+form-action 'self' $CIELO; \
+base-uri 'self'; object-src 'none'; frame-ancestors 'none'; \
+report-uri /api/central/csp-report"
+if [ "${CSP_FORCAR:-0}" = 1 ]; then CSP_CENTRAL="$CSP_CENTRAL_RO"; CSP_CENTRAL_RO=""; fi
+# Linha extra do Caddy (vazia quando CSP_FORCAR=1)
+CADDY_RO=""
+[ -n "$CSP_CENTRAL_RO" ] && CADDY_RO="		Content-Security-Policy-Report-Only \"$CSP_CENTRAL_RO\""
+
 # ---------- Modo Caddy (servidor do NIA) ----------
 if [ "$MODO" = caddy ]; then
   # descobre o Caddyfile em uso
@@ -194,6 +229,16 @@ $DOMINIO {
 	header {
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
+		Strict-Transport-Security "$HSTS"
+	}
+	# /central = pagina de pagamento (Cielo): CSP propria; o resto do site, a minima
+	@central path /central /central/ /central/index.html
+	@naoCentral not path /central /central/ /central/index.html
+	header @naoCentral Content-Security-Policy "$CSP_SITE"
+	header @central {
+		Content-Security-Policy "$CSP_CENTRAL"
+		X-Frame-Options DENY
+$CADDY_RO
 	}
 
 	# Central do Assinante: /api/central -> servico local
@@ -270,6 +315,17 @@ $LISTEN6
     location / {
         try_files \$uri \$uri/index.html \$uri.html =404;
     }
+
+    # /central = pagina de pagamento (Cielo): CSP propria. add_header dentro de
+    # location substitui os do server, por isso o snippet repete os comuns.
+    location = /central {
+        try_files /central/index.html =404;
+        include $SNIP_CENTRAL;
+    }
+    location ^~ /central/ {
+        try_files \$uri \$uri/index.html =404;
+        include $SNIP_CENTRAL;
+    }
     location ~ ^/(.+)/\$ {
         return 301 /\$1\$is_args\$args;
     }
@@ -299,8 +355,29 @@ $LISTEN6
 
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Strict-Transport-Security "$HSTS" always;
+    add_header Content-Security-Policy "$CSP_SITE" always;
 }
 EOF
+fi
+# Cabecalhos da /central num arquivo a parte, regravado a cada instalacao
+# (inclusive quando o certbot ja cuida do $CONF e ele nao e reescrito).
+install -d /etc/nginx/snippets
+{
+  echo "add_header X-Content-Type-Options nosniff always;"
+  echo "add_header Referrer-Policy strict-origin-when-cross-origin always;"
+  echo "add_header Strict-Transport-Security \"$HSTS\" always;"
+  echo "add_header X-Frame-Options DENY always;"
+  echo "add_header Content-Security-Policy \"$CSP_CENTRAL\" always;"
+  if [ -n "$CSP_CENTRAL_RO" ]; then echo "add_header Content-Security-Policy-Report-Only \"$CSP_CENTRAL_RO\" always;"; fi
+} > "$SNIP_CENTRAL"
+if ! grep -qF "$SNIP_CENTRAL" "$CONF"; then
+  amarelo "  ATENCAO: $CONF (feito pelo certbot) nao inclui os cabecalhos de seguranca da /central."
+  amarelo "  No bloco 'server' da porta 443, antes de 'location /', acrescente:"
+  amarelo '      location = /central { try_files /central/index.html =404; include '"$SNIP_CENTRAL"'; }'
+  amarelo '      location ^~ /central/ { try_files $uri $uri/index.html =404; include '"$SNIP_CENTRAL"'; }'
+  amarelo '      add_header Strict-Transport-Security "'"$HSTS"'" always;'
+  amarelo "  e rode: nginx -t && systemctl reload nginx"
 fi
 ln -sf "$CONF" /etc/nginx/sites-enabled/site-updown
 nginx -t
